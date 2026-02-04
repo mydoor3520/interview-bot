@@ -255,6 +255,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8 px-4">
+      {/* Narrow container: title + error + basic info */}
       <div className="mx-auto max-w-3xl space-y-6">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">프로필 관리</h1>
 
@@ -414,11 +415,17 @@ export default function ProfilePage() {
           )}
         </ProfileSection>
 
-        {/* Skills */}
+      </div>
+
+      {/* Wide container: skill section only */}
+      <div className="mx-auto max-w-5xl mt-6">
         <ProfileSection title="기술 스택">
           <SkillSelector skills={profile.skills} onRefetch={fetchProfile} />
         </ProfileSection>
+      </div>
 
+      {/* Narrow container: remaining sections */}
+      <div className="mx-auto max-w-3xl space-y-6 mt-6">
         {/* Experiences */}
         <ProfileSection title="경력 사항">
           <ExperienceEditor experiences={profile.experiences} onRefetch={fetchProfile} />
