@@ -27,9 +27,16 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
+
+# Copy production dependencies first
+COPY --from=deps /prod_node_modules ./node_modules
+
+# Then copy Prisma generated files and CLI (must be after node_modules to avoid overwrite)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=deps /prod_node_modules ./node_modules
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+
 COPY entrypoint.sh ./entrypoint.sh
 
 RUN chmod +x ./entrypoint.sh
@@ -40,3 +47,6 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Default CMD (can be overridden by docker-compose entrypoint)
+CMD ["/app/entrypoint.sh"]
