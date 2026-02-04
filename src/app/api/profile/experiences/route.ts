@@ -9,8 +9,8 @@ const experienceSchema = z.object({
   startDate: z.string().transform((s) => new Date(s)),
   endDate: z.string().transform((s) => new Date(s)).optional().nullable(),
   description: z.string().max(2000).optional(),
-  techStack: z.array(z.string()).optional().default([]),
-  achievements: z.array(z.string().max(500)).optional().default([]),
+  techStack: z.array(z.string().max(50)).max(20).optional().default([]),
+  achievements: z.array(z.string().max(500)).max(10).optional().default([]),
   orderIndex: z.number().int().min(0).optional().default(0),
 });
 

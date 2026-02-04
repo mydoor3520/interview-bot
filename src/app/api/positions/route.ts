@@ -7,7 +7,7 @@ const positionSchema = z.object({
   company: z.string().min(1).max(100),
   position: z.string().min(1).max(100),
   jobDescription: z.string().max(10000).optional(),
-  requirements: z.array(z.string()).optional().default([]),
+  requirements: z.array(z.string().max(200)).max(20).optional().default([]),
   notes: z.string().max(2000).optional(),
 });
 

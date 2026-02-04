@@ -14,8 +14,8 @@ const createProfileSchema = z.object({
 const updateProfileSchema = createProfileSchema.partial().extend({
   selfIntroduction: z.string().max(5000).optional(),
   resumeText: z.string().max(10000).optional(),
-  strengths: z.array(z.string().max(200)).optional(),
-  weaknesses: z.array(z.string().max(200)).optional(),
+  strengths: z.array(z.string().max(200)).max(10).optional(),
+  weaknesses: z.array(z.string().max(200)).max(10).optional(),
 });
 
 export async function GET() {

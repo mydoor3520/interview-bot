@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { requireAuth } from '@/lib/auth/middleware';
 import { createAIClient } from '@/lib/ai/client';
 import { buildEvaluationPrompt } from '@/lib/ai/prompts';
+import { checkAIRateLimit } from '@/lib/ai/rate-limit';
 import { z } from 'zod';
 
 const evaluateRequestSchema = z.object({
@@ -15,6 +16,15 @@ const evaluateRequestSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authenticated) return auth.response;
+
+  // AI rate limit check
+  const rateLimit = checkAIRateLimit();
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'AI 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+    );
+  }
 
   const body = await request.json();
   const result = evaluateRequestSchema.safeParse(body);

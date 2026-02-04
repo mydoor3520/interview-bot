@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 const createSessionSchema = z.object({
   targetPositionId: z.string().optional(),
-  topics: z.array(z.string()).min(1, '최소 1개 이상의 주제를 선택해주세요.'),
+  topics: z.array(z.string().max(100)).min(1, '최소 1개 이상의 주제를 선택해주세요.').max(20),
   difficulty: z.enum(['junior', 'mid', 'senior']),
   evaluationMode: z.enum(['immediate', 'after_complete']),
 });

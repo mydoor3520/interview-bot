@@ -1,5 +1,19 @@
 import { ProfileContext, AIMessage } from './types';
 
+/**
+ * Sanitize user input for inclusion in AI prompts.
+ * Strips potential prompt injection patterns.
+ */
+function sanitizeForPrompt(input: string): string {
+  return input
+    .replace(/```/g, '')
+    .replace(/\{[\s\S]*?\}/g, (match) => {
+      // Allow short inline content but strip JSON-like blocks
+      return match.length > 100 ? '[내용 생략]' : match;
+    })
+    .slice(0, 5000); // Max length per field
+}
+
 const PROFICIENCY_LABELS: Record<number, string> = {
   1: '입문',
   2: '초급',
@@ -18,11 +32,11 @@ export function buildProfileContext(profile: ProfileContext): string {
   const lines: string[] = [];
 
   lines.push(`## 지원자 정보`);
-  lines.push(`- 이름: ${profile.name}`);
+  lines.push(`- 이름: ${sanitizeForPrompt(profile.name)}`);
   lines.push(`- 총 경력: ${profile.totalYearsExp}년`);
-  lines.push(`- 현재 직무: ${profile.currentRole}`);
+  lines.push(`- 현재 직무: ${sanitizeForPrompt(profile.currentRole)}`);
   if (profile.currentCompany) {
-    lines.push(`- 현재 회사: ${profile.currentCompany}`);
+    lines.push(`- 현재 회사: ${sanitizeForPrompt(profile.currentCompany)}`);
   }
 
   if (profile.skills.length > 0) {
@@ -46,12 +60,12 @@ export function buildProfileContext(profile: ProfileContext): string {
       const period = exp.endDate
         ? `${exp.startDate} ~ ${exp.endDate}`
         : `${exp.startDate} ~ 현재`;
-      lines.push(`- ${exp.company} | ${exp.role} (${period})`);
-      if (exp.description) lines.push(`  업무: ${exp.description}`);
+      lines.push(`- ${sanitizeForPrompt(exp.company)} | ${sanitizeForPrompt(exp.role)} (${period})`);
+      if (exp.description) lines.push(`  업무: ${sanitizeForPrompt(exp.description)}`);
       if (exp.techStack.length > 0) lines.push(`  기술: ${exp.techStack.join(', ')}`);
       if (exp.achievements.length > 0) {
         for (const ach of exp.achievements) {
-          lines.push(`  성과: ${ach}`);
+          lines.push(`  성과: ${sanitizeForPrompt(ach)}`);
         }
       }
     }
@@ -59,7 +73,7 @@ export function buildProfileContext(profile: ProfileContext): string {
 
   if (profile.selfIntroduction) {
     lines.push(`\n## 자기소개`);
-    lines.push(profile.selfIntroduction);
+    lines.push(sanitizeForPrompt(profile.selfIntroduction));
   }
 
   if (profile.strengths.length > 0) {
@@ -74,10 +88,10 @@ export function buildProfileContext(profile: ProfileContext): string {
 
   if (profile.targetPosition) {
     lines.push(`\n## 지원 포지션`);
-    lines.push(`- 회사: ${profile.targetPosition.company}`);
-    lines.push(`- 포지션: ${profile.targetPosition.position}`);
+    lines.push(`- 회사: ${sanitizeForPrompt(profile.targetPosition.company)}`);
+    lines.push(`- 포지션: ${sanitizeForPrompt(profile.targetPosition.position)}`);
     if (profile.targetPosition.jobDescription) {
-      lines.push(`- JD:\n${profile.targetPosition.jobDescription}`);
+      lines.push(`- JD:\n${sanitizeForPrompt(profile.targetPosition.jobDescription)}`);
     }
     if (profile.targetPosition.requirements.length > 0) {
       lines.push(`- 요구사항: ${profile.targetPosition.requirements.join(', ')}`);
@@ -176,7 +190,7 @@ export function buildEvaluationPrompt(
     },
     {
       role: 'user',
-      content: `카테고리: ${category}\n난이도: ${difficulty}\n\n질문: ${question}\n\n지원자 답변:\n${userAnswer}`,
+      content: `카테고리: ${sanitizeForPrompt(category)}\n난이도: ${difficulty}\n\n질문: ${sanitizeForPrompt(question)}\n\n지원자 답변:\n${sanitizeForPrompt(userAnswer)}`,
     },
   ];
 }
@@ -185,7 +199,7 @@ export function buildSessionSummaryPrompt(
   questions: Array<{ question: string; answer: string; score?: number; category: string }>
 ): AIMessage[] {
   const questionsText = questions
-    .map((q, i) => `Q${i + 1} [${q.category}]: ${q.question}\nA: ${q.answer}\n점수: ${q.score ?? '미평가'}`)
+    .map((q, i) => `Q${i + 1} [${sanitizeForPrompt(q.category)}]: ${sanitizeForPrompt(q.question)}\nA: ${sanitizeForPrompt(q.answer)}\n점수: ${q.score ?? '미평가'}`)
     .join('\n\n');
 
   return [

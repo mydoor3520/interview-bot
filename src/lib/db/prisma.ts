@@ -7,7 +7,12 @@ const globalForPrisma = globalThis as unknown as {
 
 function createPrismaClient() {
   const base = new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  });
+
+  // Log connection errors
+  base.$connect().catch((err) => {
+    console.error('Failed to connect to database:', err);
   });
 
   setBasePrisma(base);

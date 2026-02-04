@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth/middleware';
 import { createAIClient } from '@/lib/ai/client';
 import { buildInterviewSystemPrompt } from '@/lib/ai/prompts';
 import { ProfileContext } from '@/lib/ai/types';
+import { checkAIRateLimit } from '@/lib/ai/rate-limit';
 import { z } from 'zod';
 
 const streamRequestSchema = z.object({
@@ -11,15 +12,24 @@ const streamRequestSchema = z.object({
   messages: z.array(
     z.object({
       role: z.enum(['system', 'user', 'assistant']),
-      content: z.string(),
+      content: z.string().max(50000),
     })
-  ),
+  ).max(100),
   questionIndex: z.number().optional(),
 });
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authenticated) return auth.response;
+
+  // AI rate limit check
+  const rateLimit = checkAIRateLimit();
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'AI 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+    );
+  }
 
   const body = await request.json();
   const result = streamRequestSchema.safeParse(body);
@@ -109,9 +119,11 @@ export async function POST(request: NextRequest) {
       ? [{ role: 'system' as const, content: systemPrompt }, ...messages]
       : messages;
 
-  // Stream AI response
+  // Stream AI response with timeout
   const encoder = new TextEncoder();
   let fullResponse = '';
+  const abortController = new AbortController();
+  const streamTimeout = setTimeout(() => abortController.abort(), 60_000);
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -125,46 +137,49 @@ export async function POST(request: NextRequest) {
           fullResponse += chunk;
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
         }
+        clearTimeout(streamTimeout);
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       } catch (error: unknown) {
+        clearTimeout(streamTimeout);
+        const isTimeout = error instanceof DOMException && error.name === 'AbortError';
         console.error('AI streaming error:', error);
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({ error: 'AI 응답 생성 중 오류가 발생했습니다.' })}\n\n`
+            `data: ${JSON.stringify({ error: isTimeout ? 'AI 응답 시간이 초과되었습니다.' : 'AI 응답 생성 중 오류가 발생했습니다.' })}\n\n`
           )
         );
       } finally {
         controller.close();
 
-        // Save question/answer to DB if this was a question
+        // Save question/answer to DB if this was a question (fire-and-forget)
         if (fullResponse && questionIndex !== undefined) {
-          try {
-            // Try to parse the response as JSON to extract question details
-            const jsonMatch = fullResponse.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-            if (jsonMatch) {
-              const parsed = JSON.parse(jsonMatch[1]);
-              if (parsed.type === 'question') {
-                await prisma.question.create({
-                  data: {
-                    sessionId,
-                    orderIndex: questionIndex,
-                    content: parsed.question,
-                    category: parsed.category || session.topics[0] || 'General',
-                    difficulty: parsed.difficulty || session.difficulty,
-                    status: 'pending',
-                  },
-                });
+          void (async () => {
+            try {
+              const jsonMatch = fullResponse.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+              if (!jsonMatch) return;
 
-                // Update session question count
-                await prisma.interviewSession.update({
-                  where: { id: sessionId },
-                  data: { questionCount: { increment: 1 } },
-                });
-              }
+              const parsed = JSON.parse(jsonMatch[1]);
+              if (parsed.type !== 'question') return;
+
+              await prisma.question.create({
+                data: {
+                  sessionId,
+                  orderIndex: questionIndex,
+                  content: parsed.question,
+                  category: parsed.category || session.topics[0] || 'General',
+                  difficulty: parsed.difficulty || session.difficulty,
+                  status: 'pending',
+                },
+              });
+
+              await prisma.interviewSession.update({
+                where: { id: sessionId },
+                data: { questionCount: { increment: 1 } },
+              });
+            } catch (err) {
+              console.error('Error saving question to DB:', err);
             }
-          } catch (error) {
-            console.error('Error saving question:', error);
-          }
+          })();
         }
       }
     },

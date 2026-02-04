@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
     }),
 
     // Topic scores (group by category)
+    // Prisma tagged template literals are automatically parameterized (safe from SQL injection)
     prisma.$queryRaw<Array<{ topic: string; avgScore: number; count: number }>>`
       SELECT
         q.category as topic,

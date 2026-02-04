@@ -34,7 +34,12 @@ export const softDeleteExtension = Prisma.defineExtension({
         return query(args);
       },
       async findUnique({ args, query }) {
-        return query(args);
+        // Check deletedAt after query to filter soft-deleted records
+        const result = await query(args);
+        if (result && (result as { deletedAt?: Date | null }).deletedAt !== null) {
+          return null;
+        }
+        return result;
       },
       async count({ args, query }) {
         args.where = addDeletedAtFilter(args.where) as typeof args.where;

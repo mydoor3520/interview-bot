@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/db/prisma';
 
 export async function GET() {
   const proxyUrl = process.env.AI_PROXY_URL || 'http://localhost:3456';
@@ -8,6 +9,18 @@ export async function GET() {
     timestamp: new Date().toISOString(),
     proxy: { status: 'unknown', url: proxyUrl },
   };
+
+  // Database check
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    health.database = { status: 'connected' };
+  } catch (err) {
+    health.database = {
+      status: 'disconnected',
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
+    health.status = 'degraded';
+  }
 
   try {
     const controller = new AbortController();

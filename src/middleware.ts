@@ -6,6 +6,7 @@ const STATIC_PATHS = ['/_next', '/favicon.ico', '/next.svg', '/vercel.svg', '/gl
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const jwtSecret = process.env.JWT_SECRET;
 
   // Skip static files
   if (STATIC_PATHS.some(path => pathname.startsWith(path))) {
@@ -18,8 +19,9 @@ export async function middleware(request: NextRequest) {
     if (pathname === '/login') {
       const token = request.cookies.get('token')?.value;
       if (token) {
+        if (!jwtSecret) return NextResponse.next();
         try {
-          const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+          const secret = new TextEncoder().encode(jwtSecret);
           await jwtVerify(token, secret);
           return NextResponse.redirect(new URL('/dashboard', request.url));
         } catch {
@@ -36,8 +38,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  if (!jwtSecret) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const secret = new TextEncoder().encode(jwtSecret);
     await jwtVerify(token, secret);
     return NextResponse.next();
   } catch {

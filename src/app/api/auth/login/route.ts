@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signToken } from '@/lib/auth/jwt';
 import { checkRateLimit, recordLoginAttempt } from '@/lib/auth/rate-limit';
+import { timingSafeEqual } from 'node:crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,7 +40,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isValid = password === appPassword;
+    // Timing-safe comparison to prevent timing attacks
+    const isValid = password.length === appPassword.length &&
+      timingSafeEqual(Buffer.from(password), Buffer.from(appPassword));
 
     // Record the attempt
     await recordLoginAttempt(ip, isValid);
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'strict',
       path: '/',
       maxAge: 7 * 24 * 60 * 60, // 7 days
     });
