@@ -44,3 +44,5 @@ postgres_data/
 
 # Sisyphus (planning docs - keep tracked)
 # .sisyphus/
+
+/src/generated/prisma

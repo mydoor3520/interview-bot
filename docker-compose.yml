@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: interview-bot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: interview
+      POSTGRES_PASSWORD: interview
+      POSTGRES_DB: interview_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U interview -d interview_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: interview-bot-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://interview:interview@db:5432/interview_bot
+      APP_PASSWORD: ${APP_PASSWORD:-changeme}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      AI_PROXY_URL: http://host.docker.internal:3456
+      AI_MODEL: ${AI_MODEL:-claude-sonnet-4}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    entrypoint: ["/app/entrypoint.sh"]
+
+volumes:
+  postgres_data:
