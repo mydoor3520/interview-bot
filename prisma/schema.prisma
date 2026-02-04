@@ -1,15 +1,180 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ─── 사용자 기본 프로필 (하나만 존재) ───
+model UserProfile {
+  id                String      @id @default(cuid())
+
+  // 기본 정보
+  name              String              // 이름
+  email             String?             // 이메일 (선택)
+  totalYearsExp     Int                 // 총 경력 연차
+  currentRole       String              // 현재 직무 (e.g., "백엔드 개발자")
+  currentCompany    String?             // 현재 회사명
+
+  // 자기소개 & 이력
+  selfIntroduction  String?             // 자기소개서 텍스트
+  resumeText        String?             // 이력서 텍스트 (자유 형식)
+  strengths         String[]            // 본인이 생각하는 강점
+  weaknesses        String[]            // 본인이 생각하는 약점
+
+  // 관계
+  skills            UserSkill[]         // 기술 스택 (숙련도 포함)
+  experiences       WorkExperience[]    // 경력 사항
+  targetPositions   TargetPosition[]    // 지원 회사/포지션
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+}
+
+// ─── 기술 스택 (숙련도 포함) ───
+model UserSkill {
+  id            String      @id @default(cuid())
+  profileId     String
+  profile       UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name          String          // 기술명 (e.g., "Java", "Spring Boot", "Kubernetes")
+  category      String          // 카테고리 (language / framework / database / infra / etc.)
+  proficiency   Int             // 숙련도 1-5 (1: 입문, 3: 중급, 5: 전문가)
+  yearsUsed     Int?            // 사용 연차
+  createdAt     DateTime    @default(now())
+
+  @@unique([profileId, name])
+  @@index([profileId, category])
+}
+
+// ─── 경력 사항 ───
+model WorkExperience {
+  id            String      @id @default(cuid())
+  profileId     String
+  profile       UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company       String          // 회사명
+  role          String          // 직무/직책
+  startDate     DateTime        // 시작일
+  endDate       DateTime?       // 종료일 (null = 재직중)
+  description   String?         // 업무 설명
+  techStack     String[]        // 사용 기술
+  achievements  String[]        // 주요 성과
+  orderIndex    Int             // 표시 순서
+  createdAt     DateTime    @default(now())
+}
+
+// ─── 지원 회사/포지션 (여러 개 관리 가능) ───
+model TargetPosition {
+  id            String      @id @default(cuid())
+  profileId     String
+  profile       UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company       String          // 지원 회사명
+  position      String          // 포지션 (e.g., "시니어 백엔드 개발자")
+  jobDescription String?        // JD (Job Description) 텍스트
+  requirements  String[]        // 주요 요구사항
+  notes         String?         // 메모
+  isActive      Boolean     @default(true) // 활성 여부
+  sessions      InterviewSession[] // 이 포지션으로 진행한 면접들
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+// ─── 면접 세션 ───
+model InterviewSession {
+  id              String      @id @default(cuid())
+  targetPositionId String?    // 지원 포지션 연결 (선택)
+  targetPosition  TargetPosition? @relation(fields: [targetPositionId], references: [id])
+  topics          String[]    // 선택한 주제들
+  difficulty      String      // junior / mid / senior
+  evaluationMode  String      // immediate / after_complete
+  status          String      // in_progress / completed / abandoned
+  questionCount   Int         @default(0)   // 총 질문 수 (캐싱 용도)
+  endReason       String?     // user_ended / all_topics_covered / error / timeout
+  totalScore      Float?      // 세션 평균 점수
+  summary         String?     // AI 생성 세션 요약
+  startedAt       DateTime    @default(now())
+  completedAt     DateTime?
+  deletedAt       DateTime?   // Soft Delete
+  questions       Question[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([startedAt])
+  @@index([targetPositionId, startedAt])
+}
+
+// ─── 면접 질문 ───
+model Question {
+  id            String      @id @default(cuid())
+  sessionId     String
+  session       InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  orderIndex    Int         // 질문 순서
+  content       String      // 질문 내용
+  category      String      // 주제 카테고리
+  difficulty    String      // 난이도
+  status        String      @default("pending")  // pending / answered / skipped
+  userAnswer    String?     // 사용자 답변
+  evaluation    Evaluation?
+  followUps     FollowUp[]  // 꼬리질문들
+  answeredAt    DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([sessionId, orderIndex])
+  @@index([sessionId, status])
+}
+
+// ─── 평가 ───
+model Evaluation {
+  id            String      @id @default(cuid())
+  questionId    String      @unique
+  question      Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  score         Int         // 1-10 점수
+  feedback      String      // AI 피드백
+  modelAnswer   String      // 모범 답안
+  strengths     String[]    // 강점
+  weaknesses    String[]    // 약점
+  evaluatedAt   DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+}
+
+// ─── 꼬리질문 ───
+model FollowUp {
+  id            String      @id @default(cuid())
+  questionId    String
+  question      Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  content       String      // 꼬리질문 내용
+  userAnswer    String?     // 사용자 답변
+  aiFeedback    String?     // AI 피드백
+  orderIndex    Int
+  createdAt     DateTime    @default(now())
+}
+
+// ─── 면접 주제 설정 ───
+model TopicConfig {
+  id            String      @id @default(cuid())
+  name          String      // 주제명 (e.g., "Java Concurrency")
+  category      String      // 카테고리 (e.g., "Java")
+  isPreset      Boolean     @default(false) // 프리셋 여부
+  isActive      Boolean     @default(true)
+  description   String?
+  createdAt     DateTime    @default(now())
+}
+
+// ─── 앱 설정 ───
+model AppConfig {
+  id            String      @id @default(cuid())
+  key           String      @unique
+  value         String
+  updatedAt     DateTime    @updatedAt
+}
+
+// ─── 로그인 시도 기록 (Rate Limiting 영속화) ───
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  ip        String       // 요청 IP 주소
+  success   Boolean      // 성공 여부
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
 }
