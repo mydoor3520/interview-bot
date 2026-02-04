@@ -46,3 +46,8 @@ postgres_data/
 # .sisyphus/
 
 /src/generated/prisma
+
+# Playwright
+.auth/
+playwright-report/
+test-results/
