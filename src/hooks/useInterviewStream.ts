@@ -17,8 +17,8 @@ interface Message {
 
 interface UseInterviewStreamOptions {
   sessionId: string;
-  onQuestionReceived?: (question: any) => void;
-  onEvaluationReceived?: (evaluation: any) => void;
+  onQuestionReceived?: (question: Record<string, unknown>) => void;
+  onEvaluationReceived?: (evaluation: Record<string, unknown>) => void;
   onError?: (error: string) => void;
 }
 
@@ -95,10 +95,13 @@ export function useInterviewStream(options: UseInterviewStreamOptions) {
       setMessages(prev => prev.map(m =>
         m.id === assistantId ? { ...m, isStreaming: false } : m
       ));
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'AbortError') {
         setError(err.message || 'AI 응답 중 오류 발생');
         options.onError?.(err.message);
+      } else if (!(err instanceof Error)) {
+        setError('AI 응답 중 오류 발생');
+        options.onError?.('AI 응답 중 오류 발생');
       }
     } finally {
       setIsStreaming(false);

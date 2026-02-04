@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { requireAuth } from '@/lib/auth/middleware';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 const querySchema = z.object({
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Build filter conditions
-  const where: any = {
+  const where: Prisma.InterviewSessionWhereInput = {
     deletedAt: null,
   };
 

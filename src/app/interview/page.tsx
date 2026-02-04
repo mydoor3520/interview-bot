@@ -171,9 +171,9 @@ export default function InterviewSetupPage() {
 
       const { session } = await response.json();
       router.push(`/interview/${session.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create session:', error);
-      alert(error.message || '면접 세션 생성에 실패했습니다.');
+      alert(error instanceof Error ? error.message : '면접 세션 생성에 실패했습니다.');
       setIsCreating(false);
     }
   }

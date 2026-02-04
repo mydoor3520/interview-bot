@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 
@@ -50,7 +50,7 @@ export default function HistoryPage() {
   const [minScore, setMinScore] = useState('');
   const [maxScore, setMaxScore] = useState('');
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     params.set('page', page.toString());
@@ -73,11 +73,11 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, topic, difficulty, dateFrom, dateTo, minScore, maxScore]);
 
   useEffect(() => {
     fetchSessions();
-  }, [page, topic, difficulty, dateFrom, dateTo, minScore, maxScore]);
+  }, [fetchSessions]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('이 세션을 삭제하시겠습니까?')) return;

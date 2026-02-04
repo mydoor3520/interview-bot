@@ -8,7 +8,7 @@ export function setBasePrisma(client: PrismaClient) {
   basePrisma = client;
 }
 
-function addDeletedAtFilter(where: any): any {
+function addDeletedAtFilter(where: Prisma.InterviewSessionWhereInput | undefined): Prisma.InterviewSessionWhereInput {
   if (!where) return { deletedAt: null };
   if (where.deletedAt === undefined) {
     return { ...where, deletedAt: null };
@@ -40,17 +40,17 @@ export const softDeleteExtension = Prisma.defineExtension({
         args.where = addDeletedAtFilter(args.where) as typeof args.where;
         return query(args);
       },
-      async delete({ args }) {
+      async delete({ args }: { args: { where: Prisma.InterviewSessionWhereUniqueInput } }) {
         return basePrisma.interviewSession.update({
           where: args.where,
           data: { deletedAt: new Date() },
-        }) as any;
+        }) as unknown;
       },
-      async deleteMany({ args }) {
+      async deleteMany({ args }: { args: { where?: Prisma.InterviewSessionWhereInput } }) {
         return basePrisma.interviewSession.updateMany({
           where: args.where,
           data: { deletedAt: new Date() },
-        }) as any;
+        }) as unknown;
       },
     },
   },

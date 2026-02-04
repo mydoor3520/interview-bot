@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
         }
         controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('AI streaming error:', error);
         controller.enqueue(
           encoder.encode(

@@ -83,10 +83,10 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ evaluation });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Evaluation error:', error);
       return NextResponse.json(
-        { error: '평가 생성 중 오류가 발생했습니다.', details: error.message },
+        { error: '평가 생성 중 오류가 발생했습니다.', details: error instanceof Error ? error.message : 'Unknown error' },
         { status: 500 }
       );
     }
@@ -150,9 +150,9 @@ export async function POST(request: NextRequest) {
         });
 
         evaluations.push(evaluation);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(`Evaluation error for question ${question.id}:`, error);
-        errors.push({ questionId: question.id, error: error.message });
+        errors.push({ questionId: question.id, error: error instanceof Error ? error.message : 'Unknown error' });
       }
     }
 

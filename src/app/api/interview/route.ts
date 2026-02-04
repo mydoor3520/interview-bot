@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { requireAuth } from '@/lib/auth/middleware';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 const createSessionSchema = z.object({
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const statusFilter = searchParams.get('status');
 
-  const where: any = {
+  const where: Prisma.InterviewSessionWhereInput = {
     deletedAt: null,
   };
 

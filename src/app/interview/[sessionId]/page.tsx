@@ -33,7 +33,7 @@ export default function InterviewPage() {
   const [showSummary, setShowSummary] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, isStreaming, error, sendMessage, startInterview, stopStreaming } = useInterviewStream({
+  const { messages, isStreaming, error, sendMessage, startInterview } = useInterviewStream({
     sessionId,
     onError: (err) => {
       console.error('Interview stream error:', err);

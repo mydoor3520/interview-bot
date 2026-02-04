@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface Profile {
@@ -47,11 +47,7 @@ export default function ProfilePage() {
   const [editData, setEditData] = useState({ name: '', email: '', totalYearsExp: 0, currentRole: '', currentCompany: '' });
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  async function fetchProfile() {
+  const fetchProfile = useCallback(async () => {
     try {
       const res = await fetch('/api/profile');
       const data = await res.json();
@@ -72,7 +68,11 @@ export default function ProfilePage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   async function handleSave() {
     setIsSaving(true);
