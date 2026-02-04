@@ -524,7 +524,28 @@ interface BatchEvaluationResponse {
 }
 ```
 
-### 3.6 JSON 파싱 전략
+### 3.6 Fallback 응답 (파싱 실패 시)
+
+```typescript
+interface FallbackResponse {
+  type: "fallback";
+  /** 파싱에 실패한 원본 텍스트 */
+  rawContent: string;
+  /** 에러 메시지 */
+  error: string;
+}
+```
+
+예시:
+```json
+{
+  "type": "fallback",
+  "rawContent": "{\"type\":\"question\",\"content\":\"질문입니다\",\"category",
+  "error": "Missing type field"
+}
+```
+
+### 3.7 JSON 파싱 전략
 
 ```typescript
 // src/lib/ai/response-parser.ts
@@ -534,7 +555,8 @@ type AIResponse =
   | EvaluationResponse
   | FollowUpResponse
   | SummaryResponse
-  | BatchEvaluationResponse;
+  | BatchEvaluationResponse
+  | FallbackResponse;
 
 /**
  * AI 스트리밍 응답에서 JSON 객체를 추출 및 파싱
@@ -546,14 +568,29 @@ export function parseAIResponse(rawText: string): AIResponse[] {
   let cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
   const jsonStrings = extractJsonObjects(cleaned);
 
-  for (const str of jsonStrings) {
+  for (const jsonStr of jsonStrings) {
     try {
-      const parsed = JSON.parse(str);
-      if (parsed.type && validateResponse(parsed)) {
-        results.push(parsed);
+      const parsed = JSON.parse(jsonStr);
+      // 기존: 파싱 실패 시 무시
+      // 변경: Fallback 응답으로 래핑하여 데이터 유실 방지
+      if (!parsed.type || !validateResponse(parsed)) {
+        results.push({
+          type: 'fallback',
+          rawContent: jsonStr,
+          error: parsed.type
+            ? `Invalid ${parsed.type} response structure`
+            : 'Missing type field',
+        } as FallbackResponse);
+        continue;
       }
+      results.push(parsed);
     } catch (e) {
-      console.warn('[PARSER] JSON parse failed:', str.slice(0, 100));
+      // JSON 파싱 자체가 실패한 경우도 Fallback으로 처리
+      results.push({
+        type: 'fallback',
+        rawContent: jsonStr,
+        error: `JSON parse error: ${e instanceof Error ? e.message : String(e)}`,
+      } as FallbackResponse);
     }
   }
   return results;
@@ -584,9 +621,37 @@ function validateResponse(obj: any): boolean {
       return typeof obj.totalScore === 'number' && typeof obj.topicScores === 'object';
     case 'batch_evaluation':
       return Array.isArray(obj.evaluations);
+    case 'fallback':
+      return typeof obj.rawContent === 'string' && typeof obj.error === 'string';
     default:
       return false;
   }
+}
+```
+
+### 3.8 Fallback 응답 클라이언트 처리
+
+클라이언트에서 `type === 'fallback'` 응답 수신 시:
+
+1. **원본 텍스트 표시**: `rawContent`를 채팅 메시지로 표시 (마크다운 렌더링)
+2. **사용자 안내**: "AI 응답 형식이 올바르지 않습니다. 다시 시도하시겠습니까?" 안내 표시
+3. **재시도 옵션**: 재시도 버튼 클릭 시 동일 요청 재전송
+4. **데이터 보존**: 원본 텍스트는 DB에 `Question.content` 또는 `Evaluation.feedback`에 저장하여 유실 방지
+
+구현 예시:
+```typescript
+// src/components/interview/ChatMessage.tsx
+if (response.type === 'fallback') {
+  return (
+    <div className="fallback-message">
+      <div className="content">{response.rawContent}</div>
+      <div className="error-notice">
+        <AlertIcon />
+        <span>AI 응답 형식이 올바르지 않습니다.</span>
+        <button onClick={handleRetry}>다시 시도</button>
+      </div>
+    </div>
+  );
 }
 ```
 
@@ -1059,6 +1124,89 @@ function summarizeOlderMessages(msgs: ConversationMessage[]): string {
 6단계: 주제별 프롬프트 힌트 제거
 7단계: (최후) 대화 히스토리를 최근 3 Q&A만 유지
 ```
+
+### 7.4 토큰 임계값 모니터링 및 자동 대응
+
+실시간 토큰 사용량 추적 및 단계적 대응 전략:
+
+```typescript
+// 토큰 사용량 임계값
+const TOKEN_WARNING_THRESHOLD = 0.70;   // 70% - 경고
+const TOKEN_SHRINK_THRESHOLD = 0.80;    // 80% - 자동 축소
+const TOKEN_CRITICAL_THRESHOLD = 0.95;  // 95% - 강제 종료
+```
+
+**임계값별 대응:**
+
+- **70% 도달**: 사용자에게 경고 메시지 반환
+  ```json
+  {
+    "type": "system_notice",
+    "message": "면접이 길어지고 있습니다. 2-3개 질문 후 종료를 권장합니다."
+  }
+  ```
+
+- **80% 도달**: 자동으로 이전 대화 요약 (7.3의 4단계 실행)
+  - 가장 오래된 Q&A 쌍 3개를 한 줄 요약으로 대체
+  - 요약 후 토큰 사용량이 60% 이하로 감소해야 함
+
+- **95% 도달**: 강제 종료 + 자동 평가 생성
+  ```json
+  {
+    "type": "system_notice",
+    "message": "컨텍스트 한계에 도달했습니다. 면접을 종료하고 평가를 생성합니다."
+  }
+  ```
+
+### 7.5 구현 배치
+
+컨텍스트 관리 로직은 **Step 5 (프롬프트 엔지니어링)**에서 구현합니다:
+
+**구현 파일:**
+- `src/lib/ai/context-manager.ts`: 토큰 추정, 임계값 관리, 대화 요약 요청
+- `src/lib/ai/__tests__/context-manager.test.ts`: 토큰 초과 시나리오 테스트
+
+**구현 시 테스트해야 할 시나리오:**
+
+1. **70% 도달 시**: 경고 메시지 반환 확인
+   ```typescript
+   test('should warn user at 70% token usage', () => {
+     const context = buildContext(profile, messages, /* 70% 상황 */);
+     expect(context.warning).toBe(true);
+     expect(context.warningMessage).toContain('2-3개 질문 후 종료');
+   });
+   ```
+
+2. **80% 도달 시**: 이전 대화 자동 요약 확인
+   ```typescript
+   test('should auto-summarize at 80% token usage', () => {
+     const messages = createLongConversation(20); // 80% 유발
+     const context = buildContext(profile, messages);
+     expect(context.messages.length).toBeLessThan(messages.length);
+     expect(context.summary).toBeDefined();
+   });
+   ```
+
+3. **95% 도달 시**: 강제 종료 + 평가 생성 확인
+   ```typescript
+   test('should force terminate at 95% token usage', () => {
+     const messages = createLongConversation(30); // 95% 유발
+     const context = buildContext(profile, messages);
+     expect(context.forceTerminate).toBe(true);
+     expect(context.terminateReason).toBe('context_limit');
+   });
+   ```
+
+4. **요약 후 토큰 감소 확인**: 요약 후 토큰 사용량이 60% 이하로 감소하는지 확인
+   ```typescript
+   test('should reduce token usage to below 60% after summarization', () => {
+     const messages = createLongConversation(20);
+     const before = estimateTokens(messages);
+     const context = buildContext(profile, messages);
+     const after = estimateTokens(context.messages);
+     expect(after / before).toBeLessThan(0.60);
+   });
+   ```
 
 ---
 
