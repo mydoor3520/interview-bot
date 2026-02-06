@@ -44,7 +44,10 @@ export default function InterviewPage() {
     const loadSession = async () => {
       try {
         const res = await fetch(`/api/interview?id=${sessionId}`);
-        if (!res.ok) throw new Error('세션 로드 실패');
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => null);
+          throw new Error(errBody?.error || `세션 로드 실패 (${res.status})`);
+        }
         const data = await res.json();
         setSessionData(data);
 
@@ -64,7 +67,7 @@ export default function InterviewPage() {
   }, [sessionId, router]);
 
   useEffect(() => {
-    if (!isLoading && sessionData && sessionData.status === 'active' && messages.length === 0) {
+    if (!isLoading && sessionData && sessionData.status === 'in_progress' && messages.length === 0) {
       startInterview();
     }
   }, [isLoading, sessionData, messages.length, startInterview]);
@@ -90,7 +93,7 @@ export default function InterviewPage() {
       if (!res.ok) throw new Error('면접 종료 실패');
 
       const updatedData = await res.json();
-      setSessionData(updatedData);
+      setSessionData(updatedData.session ?? updatedData);
       setShowSummary(true);
     } catch (err) {
       console.error('Failed to end interview:', err);
@@ -203,8 +206,14 @@ export default function InterviewPage() {
             </div>
           )}
           {error && (
-            <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="bg-red-950/30 border border-red-800 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <span className="text-red-400 text-lg leading-none mt-0.5">!</span>
+                <div>
+                  <p className="text-sm font-medium text-red-400 mb-1">오류 발생</p>
+                  <p className="text-sm text-red-300/80">{error}</p>
+                </div>
+              </div>
             </div>
           )}
           <div ref={messagesEndRef} />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 
 interface Evaluation {
@@ -48,15 +48,17 @@ const DIFFICULTIES = {
   senior: '시니어',
 };
 
-export default function SessionDetailPage({ params }: { params: { sessionId: string } }) {
+export default function SessionDetailPage() {
   const router = useRouter();
+  const params = useParams();
+  const sessionId = params.sessionId as string;
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchSession = async () => {
       try {
-        const res = await fetch(`/api/history?sessionId=${params.sessionId}`);
+        const res = await fetch(`/api/history?sessionId=${sessionId}`);
         if (res.ok) {
           const data = await res.json();
           setSession(data.session);
@@ -72,7 +74,7 @@ export default function SessionDetailPage({ params }: { params: { sessionId: str
     };
 
     fetchSession();
-  }, [params.sessionId, router]);
+  }, [sessionId, router]);
 
   if (loading) {
     return (
