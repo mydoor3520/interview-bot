@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
+import { validateOrigin } from '@/lib/auth/csrf';
 
 const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/api/auth', '/api/webhooks'];
 const STATIC_PATHS = ['/_next', '/favicon.ico', '/next.svg', '/vercel.svg', '/globe.svg', '/window.svg', '/file.svg'];
@@ -73,6 +74,20 @@ export async function middleware(request: NextRequest) {
   // Skip static files
   if (STATIC_PATHS.some(path => pathname.startsWith(path))) {
     return NextResponse.next();
+  }
+
+  // CSRF validation for state-changing requests
+  if (pathname.startsWith('/api/') && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+    // Skip CSRF for webhooks, crons, and initial auth endpoints
+    const skipCsrf = pathname.startsWith('/api/webhooks/') ||
+                     pathname.startsWith('/api/cron/') ||
+                     pathname === '/api/auth/login' ||
+                     pathname === '/api/auth/signup';
+
+    if (!skipCsrf) {
+      const csrfError = validateOrigin(request);
+      if (csrfError) return csrfError;
+    }
   }
 
   // Admin route IP access control + rate limiting
