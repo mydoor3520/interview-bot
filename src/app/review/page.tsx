@@ -64,16 +64,43 @@ export default function ReviewPage() {
     }
   };
 
-  const handleStartReview = () => {
+  const handleStartReview = async () => {
     if (selectedIds.size === 0) {
       alert('복습할 질문을 선택해주세요.');
       return;
     }
 
-    // In a real implementation, you would create a new interview session
-    // with the selected question topics/categories
-    alert('복습 세션 시작 기능은 아직 구현되지 않았습니다.');
-    // router.push('/interview?reviewQuestions=' + Array.from(selectedIds).join(','));
+    setLoading(true);
+    try {
+      // Get selected questions
+      const selectedQuestions = questions.filter((q) => selectedIds.has(q.id));
+
+      // Get unique topics from selected questions
+      const topics = [...new Set(selectedQuestions.map((q) => q.category))];
+
+      // Get difficulty from first selected question (or use default)
+      const difficulty = selectedQuestions[0]?.session?.difficulty || 'mid';
+
+      // Create new interview session with review mode
+      const res = await fetch('/api/interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topics: topics.length > 0 ? topics : ['General'],
+          difficulty,
+          evaluationMode: 'immediate',
+        }),
+      });
+
+      if (!res.ok) throw new Error('세션 생성 실패');
+
+      const data = await res.json();
+      router.push(`/interview/${data.session.id}`);
+    } catch (err) {
+      console.error('Failed to start review session:', err);
+      alert('복습 세션을 시작하지 못했습니다.');
+      setLoading(false);
+    }
   };
 
   // Filter by category
