@@ -49,6 +49,7 @@ export async function GET(request: NextRequest) {
     where: { userId, status: 'completed', deletedAt: null },
     include: { questions: { include: { evaluation: true } } },
     orderBy: { completedAt: 'desc' },
+    take: 100,
   });
 
   const totalSessions = sessions.length;
