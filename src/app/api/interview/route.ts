@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { checkSessionLimit } from '@/lib/feature-gate';
+import { TIER_LIMITS } from '@/lib/feature-gate';
 import type { TierKey } from '@/lib/feature-gate';
 
 const createSessionSchema = z.object({
@@ -26,16 +26,6 @@ export async function POST(request: NextRequest) {
   const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  // Session quota check
-  const tier = auth.user.tier as TierKey;
-  const quota = await checkSessionLimit(auth.user.userId, tier);
-  if (!quota.allowed) {
-    return NextResponse.json(
-      { error: quota.message, upgradeUrl: '/pricing' },
-      { status: 403 }
-    );
-  }
-
   const body = await request.json();
   const result = createSessionSchema.safeParse(body);
   if (!result.success) {
@@ -47,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   const { targetPositionId, topics, difficulty, evaluationMode } = result.data;
 
-  // Validate target position if provided
+  // Validate target position if provided (read operation, can stay outside transaction)
   if (targetPositionId) {
     const position = await prisma.targetPosition.findUnique({
       where: { id: targetPositionId },
@@ -57,22 +47,60 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const session = await prisma.interviewSession.create({
-    data: {
-      userId: auth.user.userId,
-      targetPositionId,
-      topics,
-      difficulty,
-      evaluationMode,
-      status: 'in_progress',
-    },
-    include: {
-      targetPosition: true,
-      _count: { select: { questions: true } },
-    },
+  // Session quota check + creation in transaction to prevent race condition
+  const tier = auth.user.tier as TierKey;
+
+  const transactionResult = await prisma.$transaction(async (tx) => {
+    // Check quota inside transaction
+    const limit = TIER_LIMITS[tier].monthlySessions;
+
+    if (limit !== null) {
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      const count = await tx.interviewSession.count({
+        where: {
+          userId: auth.user.userId,
+          createdAt: { gte: monthStart },
+          deletedAt: null,
+        },
+      });
+
+      if (count >= limit) {
+        return {
+          error: `이번 달 무료 면접 횟수(${limit}회)를 모두 사용했습니다. PRO로 업그레이드하면 무제한으로 이용할 수 있습니다.`
+        };
+      }
+    }
+
+    // Create session inside same transaction
+    const session = await tx.interviewSession.create({
+      data: {
+        userId: auth.user.userId,
+        targetPositionId,
+        topics,
+        difficulty,
+        evaluationMode,
+        status: 'in_progress',
+      },
+      include: {
+        targetPosition: true,
+        _count: { select: { questions: true } },
+      },
+    });
+
+    return { session };
   });
 
-  return NextResponse.json({ session }, { status: 201 });
+  if ('error' in transactionResult) {
+    return NextResponse.json(
+      { error: transactionResult.error, upgradeUrl: '/pricing' },
+      { status: 403 }
+    );
+  }
+
+  return NextResponse.json({ session: transactionResult.session }, { status: 201 });
 }
 
 // GET - List sessions
