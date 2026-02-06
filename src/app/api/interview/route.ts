@@ -160,6 +160,12 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
   }
 
+  // 종료 시 미답변 질문 정리: pending 상태의 질문을 unanswered로 변경
+  await prisma.question.updateMany({
+    where: { sessionId: id, status: 'pending' },
+    data: { status: 'unanswered' },
+  });
+
   // 종료 시 데이터 정리: questionCount를 실제 Question 수로 동기화
   const actualQuestionCount = await prisma.question.count({
     where: { sessionId: id },

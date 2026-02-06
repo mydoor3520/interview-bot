@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
 
   // Load profile data
   const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
     include: {
       skills: true,
       experiences: {
