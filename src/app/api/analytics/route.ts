@@ -1,0 +1,75 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
+import { prisma } from '@/lib/db/prisma';
+import { checkBooleanFeature } from '@/lib/feature-gate';
+import type { TierKey } from '@/lib/feature-gate';
+import {
+  calculateAverage,
+  analyzeByTopic,
+  analyzeProgress,
+  identifyWeakAreas,
+  identifyStrengths,
+  generateRadarData,
+  generateRecommendations,
+} from '@/lib/analytics';
+
+export async function GET(request: NextRequest) {
+  const auth = requireAuthV2(request);
+  if (!auth.authenticated) return auth.response;
+
+  const { userId, tier } = auth.user;
+  const tierKey = tier as TierKey;
+  const hasAdvanced = checkBooleanFeature(tierKey, 'advancedAnalytics');
+
+  if (!hasAdvanced) {
+    // Free tier: basic stats only
+    const sessions = await prisma.interviewSession.findMany({
+      where: { userId, status: 'completed', deletedAt: null },
+      include: { questions: { include: { evaluation: true } } },
+      orderBy: { completedAt: 'desc' },
+      take: 10,
+    });
+
+    return NextResponse.json({
+      tier: tierKey,
+      totalSessions: sessions.length,
+      averageScore: calculateAverage(sessions),
+      recentSessions: sessions.slice(0, 5).map(s => ({
+        id: s.id,
+        topics: s.topics,
+        completedAt: s.completedAt,
+        questionCount: s.questions.length,
+        averageScore: calculateAverage([s]),
+      })),
+    });
+  }
+
+  // Pro: full analytics
+  const sessions = await prisma.interviewSession.findMany({
+    where: { userId, status: 'completed', deletedAt: null },
+    include: { questions: { include: { evaluation: true } } },
+    orderBy: { completedAt: 'desc' },
+  });
+
+  const totalSessions = sessions.length;
+  const averageScore = calculateAverage(sessions);
+
+  return NextResponse.json({
+    tier: tierKey,
+    totalSessions,
+    averageScore,
+    recentSessions: sessions.slice(0, 5).map(s => ({
+      id: s.id,
+      topics: s.topics,
+      completedAt: s.completedAt,
+      questionCount: s.questions.length,
+      averageScore: calculateAverage([s]),
+    })),
+    topicPerformance: analyzeByTopic(sessions),
+    progressOverTime: analyzeProgress(sessions),
+    weakAreas: identifyWeakAreas(sessions),
+    strengths: identifyStrengths(sessions),
+    radarChart: generateRadarData(sessions),
+    recommendations: generateRecommendations(sessions),
+  });
+}

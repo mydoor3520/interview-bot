@@ -4,14 +4,37 @@ interface EmailOptions {
   html: string;
 }
 
-async function sendEmail(options: EmailOptions): Promise<void> {
-  if (process.env.NODE_ENV === 'production' && process.env.EMAIL_API_KEY) {
-    // TODO: Implement production email sending (Resend, SendGrid, etc.)
-    console.log(`[EMAIL] Would send email to ${options.to}: ${options.subject}`);
-    return;
+let resendClient: any = null;
+
+function getResend() {
+  if (!resendClient && process.env.RESEND_API_KEY) {
+    // Dynamic import to avoid build errors when resend is not needed
+    const { Resend } = require('resend');
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
+
+const EMAIL_FROM = process.env.EMAIL_FROM || 'InterviewBot <noreply@interviewbot.com>';
+
+export async function sendEmail(options: EmailOptions): Promise<void> {
+  const resend = getResend();
+  if (resend) {
+    try {
+      await resend.emails.send({
+        from: EMAIL_FROM,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+      return;
+    } catch (err) {
+      console.error('[EMAIL] Resend send failed:', err);
+      // Fall through to console log
+    }
   }
 
-  // Development: log to console
+  // Development / fallback: log to console
   console.log('━'.repeat(60));
   console.log(`📧 Email to: ${options.to}`);
   console.log(`📋 Subject: ${options.subject}`);

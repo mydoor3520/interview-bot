@@ -69,6 +69,8 @@ model User {
   usageLogs    AIUsageLog[]
   subscription Subscription?
 
+  emailNotifications Boolean @default(true)
+
   // 감사
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -181,6 +183,8 @@ model InterviewSession {
   @@index([startedAt])
   @@index([targetPositionId, startedAt])
   @@index([userId, startedAt])
+  @@index([userId, createdAt])
+  @@index([userId, status, completedAt])
 }
 
 // ─── 면접 질문 ───
