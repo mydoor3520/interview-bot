@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { useToast } from '@/components/Toast';
 
 interface Topic {
   id: string;
@@ -13,6 +14,7 @@ interface Topic {
 }
 
 export default function TopicsPage() {
+  const { toast } = useToast();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,7 +44,7 @@ export default function TopicsPage() {
 
   const handleCreate = async () => {
     if (!newTopic.name || !newTopic.category) {
-      alert('이름과 카테고리를 입력해주세요.');
+      toast('이름과 카테고리를 입력해주세요.', 'warning');
       return;
     }
 
@@ -58,11 +60,11 @@ export default function TopicsPage() {
         setIsAdding(false);
         fetchTopics();
       } else {
-        alert('주제 생성에 실패했습니다.');
+        toast('주제 생성에 실패했습니다.', 'error');
       }
     } catch (error) {
       console.error('Failed to create topic:', error);
-      alert('주제 생성에 실패했습니다.');
+      toast('주제 생성에 실패했습니다.', 'error');
     }
   };
 
@@ -84,7 +86,7 @@ export default function TopicsPage() {
 
   const handleDelete = async (topic: Topic) => {
     if (topic.isPreset) {
-      alert('프리셋 주제는 삭제할 수 없습니다.');
+      toast('프리셋 주제는 삭제할 수 없습니다.', 'warning');
       return;
     }
 
@@ -95,11 +97,11 @@ export default function TopicsPage() {
       if (res.ok) {
         fetchTopics();
       } else {
-        alert('주제 삭제에 실패했습니다.');
+        toast('주제 삭제에 실패했습니다.', 'error');
       }
     } catch (error) {
       console.error('Failed to delete topic:', error);
-      alert('주제 삭제에 실패했습니다.');
+      toast('주제 삭제에 실패했습니다.', 'error');
     }
   };
 

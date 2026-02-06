@@ -7,6 +7,7 @@ import { ChatMessage } from '@/components/interview/ChatMessage';
 import { ChatInput } from '@/components/interview/ChatInput';
 import { SessionSummary } from '@/components/interview/SessionSummary';
 import { cn } from '@/lib/utils/cn';
+import { useToast } from '@/components/Toast';
 
 interface SessionData {
   id: string;
@@ -27,6 +28,7 @@ export default function InterviewPage() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params.sessionId as string;
+  const { toast } = useToast();
 
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,7 +58,7 @@ export default function InterviewPage() {
         }
       } catch (err) {
         console.error('Failed to load session:', err);
-        alert('세션을 불러올 수 없습니다.');
+        toast('세션을 불러올 수 없습니다.', 'error');
         router.push('/interview');
       } finally {
         setIsLoading(false);
@@ -64,7 +66,7 @@ export default function InterviewPage() {
     };
 
     loadSession();
-  }, [sessionId, router]);
+  }, [sessionId, router, toast]);
 
   useEffect(() => {
     if (!isLoading && sessionData && sessionData.status === 'in_progress' && messages.length === 0) {
@@ -97,7 +99,7 @@ export default function InterviewPage() {
       setShowSummary(true);
     } catch (err) {
       console.error('Failed to end interview:', err);
-      alert('면접을 종료할 수 없습니다.');
+      toast('면접을 종료할 수 없습니다.', 'error');
     }
   };
 

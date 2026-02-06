@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useToast } from '@/components/Toast';
 
 interface Payment {
   id: string;
@@ -54,6 +55,7 @@ function SuccessBanner() {
 }
 
 function BillingContent() {
+  const { toast } = useToast();
   const [data, setData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +93,7 @@ function BillingContent() {
       const { url } = await response.json();
       window.location.href = url;
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to open portal');
+      toast(err instanceof Error ? err.message : 'Failed to open portal', 'error');
       setActionLoading(false);
     }
   };
@@ -110,7 +112,7 @@ function BillingContent() {
       }
       await fetchSubscription();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to cancel subscription');
+      toast(err instanceof Error ? err.message : 'Failed to cancel subscription', 'error');
     } finally {
       setActionLoading(false);
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
+import { useToast } from '@/components/Toast';
 
 interface Position {
   id: string;
@@ -70,6 +71,7 @@ const EVALUATION_MODES = [
 
 export default function InterviewSetupPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [positions, setPositions] = useState<Position[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,7 +149,7 @@ export default function InterviewSetupPage() {
 
   async function handleStart() {
     if (selectedTopics.length === 0) {
-      alert('최소 1개 이상의 주제를 선택해주세요.');
+      toast('최소 1개 이상의 주제를 선택해주세요.', 'warning');
       return;
     }
 
@@ -173,7 +175,7 @@ export default function InterviewSetupPage() {
       router.push(`/interview/${session.id}`);
     } catch (error: unknown) {
       console.error('Failed to create session:', error);
-      alert(error instanceof Error ? error.message : '면접 세션 생성에 실패했습니다.');
+      toast(error instanceof Error ? error.message : '면접 세션 생성에 실패했습니다.', 'error');
       setIsCreating(false);
     }
   }

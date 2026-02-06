@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useToast } from '@/components/Toast';
 
 function CheckIcon({ className }: { className?: string }) {
   return (
@@ -11,6 +12,7 @@ function CheckIcon({ className }: { className?: string }) {
 }
 
 export default function PricingPage() {
+  const { toast } = useToast();
   const [billingCycle, setBillingCycle] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
   const [isLoading, setIsLoading] = useState(false);
   const [expandedFeatures, setExpandedFeatures] = useState(false);
@@ -32,11 +34,11 @@ export default function PricingPage() {
       if (data.url) {
         window.location.href = data.url;
       } else {
-        alert('결제 페이지를 생성하는 중 오류가 발생했습니다.');
+        toast('결제 페이지를 생성하는 중 오류가 발생했습니다.', 'error');
       }
     } catch (error) {
       console.error('Checkout error:', error);
-      alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+      toast('네트워크 오류가 발생했습니다. 다시 시도해주세요.', 'error');
     } finally {
       setIsLoading(false);
     }

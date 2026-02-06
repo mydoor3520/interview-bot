@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
+import { useToast } from '@/components/Toast';
 
 interface Evaluation {
   score: number;
@@ -52,6 +53,7 @@ export default function SessionDetailPage() {
   const router = useRouter();
   const params = useParams();
   const sessionId = params.sessionId as string;
+  const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -63,7 +65,7 @@ export default function SessionDetailPage() {
           const data = await res.json();
           setSession(data.session);
         } else {
-          alert('세션을 찾을 수 없습니다.');
+          toast('세션을 찾을 수 없습니다.', 'error');
           router.push('/history');
         }
       } catch (error) {
@@ -74,7 +76,7 @@ export default function SessionDetailPage() {
     };
 
     fetchSession();
-  }, [sessionId, router]);
+  }, [sessionId, router, toast]);
 
   if (loading) {
     return (

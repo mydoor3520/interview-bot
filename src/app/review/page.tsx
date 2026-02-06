@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
+import { useToast } from '@/components/Toast';
 
 interface Evaluation {
   score: number;
@@ -23,6 +24,7 @@ interface WeakQuestion {
 
 export default function ReviewPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [questions, setQuestions] = useState<WeakQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -66,7 +68,7 @@ export default function ReviewPage() {
 
   const handleStartReview = async () => {
     if (selectedIds.size === 0) {
-      alert('복습할 질문을 선택해주세요.');
+      toast('복습할 질문을 선택해주세요.', 'warning');
       return;
     }
 
@@ -98,7 +100,7 @@ export default function ReviewPage() {
       router.push(`/interview/${data.session.id}`);
     } catch (err) {
       console.error('Failed to start review session:', err);
-      alert('복습 세션을 시작하지 못했습니다.');
+      toast('복습 세션을 시작하지 못했습니다.', 'error');
       setLoading(false);
     }
   };
