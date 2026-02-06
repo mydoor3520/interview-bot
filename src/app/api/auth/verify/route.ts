@@ -1,12 +1,9 @@
-import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth/middleware';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 
-export async function GET() {
-  const { authenticated, response } = await requireAuth();
-  
-  if (!authenticated) {
-    return response;
-  }
+export async function GET(request: NextRequest) {
+  const auth = requireAuthV2(request);
+  if (!auth.authenticated) return auth.response;
 
-  return NextResponse.json({ authenticated: true });
+  return NextResponse.json({ authenticated: true, userId: auth.user.userId });
 }

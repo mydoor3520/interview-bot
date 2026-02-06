@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { z } from 'zod';
 
 const createProfileSchema = z.object({
@@ -18,11 +18,12 @@ const updateProfileSchema = createProfileSchema.partial().extend({
   weaknesses: z.array(z.string().max(200)).max(10).optional(),
 });
 
-export async function GET() {
-  const auth = await requireAuth();
+export async function GET(request: NextRequest) {
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
     include: {
       skills: { orderBy: { createdAt: 'desc' } },
       experiences: { orderBy: { orderIndex: 'asc' } },
@@ -38,11 +39,13 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   // Check if profile already exists
-  const existing = await prisma.userProfile.findFirst();
+  const existing = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
   if (existing) {
     return NextResponse.json({ error: '프로필이 이미 존재합니다.' }, { status: 409 });
   }
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
   }
 
   const profile = await prisma.userProfile.create({
-    data: result.data,
+    data: { ...result.data, userId: auth.user.userId },
     include: {
       skills: true,
       experiences: true,
@@ -66,10 +69,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  const profile = await prisma.userProfile.findFirst();
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
   if (!profile) {
     return NextResponse.json({ error: '프로필이 존재하지 않습니다.' }, { status: 404 });
   }

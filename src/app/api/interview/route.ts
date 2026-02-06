@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
 const createSessionSchema = z.object({
-  targetPositionId: z.string().optional(),
-  topics: z.array(z.string().max(100)).min(1, '최소 1개 이상의 주제를 선택해주세요.').max(20),
+  targetPositionId: z.string().nullish().transform(v => v ?? undefined),
+  topics: z.array(z.string().max(100)).min(1, '최소 1개 이상의 주제를 선택해주세요.').max(50),
   difficulty: z.enum(['junior', 'mid', 'senior']),
   evaluationMode: z.enum(['immediate', 'after_complete']),
 });
@@ -21,7 +21,7 @@ const updateSessionSchema = z.object({
 
 // POST - Create new session
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const body = await request.json();
@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
 
   const session = await prisma.interviewSession.create({
     data: {
+      userId: auth.user.userId,
       targetPositionId,
       topics,
       difficulty,
@@ -64,13 +65,40 @@ export async function POST(request: NextRequest) {
 
 // GET - List sessions
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+
+  // Single session lookup
+  if (id) {
+    const session = await prisma.interviewSession.findFirst({
+      where: { id, userId: auth.user.userId },
+      include: {
+        targetPosition: {
+          select: {
+            id: true,
+            company: true,
+            position: true,
+          },
+        },
+        _count: { select: { questions: true } },
+      },
+    });
+
+    if (!session || session.deletedAt) {
+      return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    return NextResponse.json(session);
+  }
+
+  // List sessions
   const statusFilter = searchParams.get('status');
 
   const where: Prisma.InterviewSessionWhereInput = {
+    userId: auth.user.userId,
     deletedAt: null,
   };
 
@@ -98,7 +126,7 @@ export async function GET(request: NextRequest) {
 
 // PUT - Update session (for ending)
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const body = await request.json();
@@ -112,13 +140,18 @@ export async function PUT(request: NextRequest) {
 
   const { id, status, endReason, totalScore, summary } = result.data;
 
-  const existing = await prisma.interviewSession.findUnique({
-    where: { id },
+  const existing = await prisma.interviewSession.findFirst({
+    where: { id, userId: auth.user.userId },
   });
 
   if (!existing) {
     return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
   }
+
+  // 종료 시 데이터 정리: questionCount를 실제 Question 수로 동기화
+  const actualQuestionCount = await prisma.question.count({
+    where: { sessionId: id },
+  });
 
   const session = await prisma.interviewSession.update({
     where: { id },
@@ -127,6 +160,7 @@ export async function PUT(request: NextRequest) {
       endReason,
       totalScore,
       summary,
+      questionCount: actualQuestionCount,
       completedAt: new Date(),
     },
     include: {

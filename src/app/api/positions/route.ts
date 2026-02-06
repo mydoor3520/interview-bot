@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { z } from 'zod';
 
 const positionSchema = z.object({
@@ -11,11 +11,13 @@ const positionSchema = z.object({
   notes: z.string().max(2000).optional(),
 });
 
-export async function GET() {
-  const auth = await requireAuth();
+export async function GET(request: NextRequest) {
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  const profile = await prisma.userProfile.findFirst();
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
   if (!profile) {
     return NextResponse.json({ positions: [] });
   }
@@ -30,10 +32,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  const profile = await prisma.userProfile.findFirst();
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
   if (!profile) {
     return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
   }
@@ -52,8 +56,15 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
+  if (!profile) {
+    return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
+  }
 
   const body = await request.json();
   const { id, ...data } = body;
@@ -66,6 +77,14 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: '입력 데이터가 올바르지 않습니다.' }, { status: 400 });
   }
 
+  // Verify position belongs to user's profile
+  const existing = await prisma.targetPosition.findFirst({
+    where: { id, profileId: profile.id },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: '포지션을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
   const position = await prisma.targetPosition.update({
     where: { id },
     data: result.data,
@@ -75,15 +94,25 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
+  if (!profile) {
+    return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
+  }
 
   const { id } = await request.json();
   if (!id) {
     return NextResponse.json({ error: 'id가 필요합니다.' }, { status: 400 });
   }
 
-  const current = await prisma.targetPosition.findUnique({ where: { id } });
+  // Verify position belongs to user's profile
+  const current = await prisma.targetPosition.findFirst({
+    where: { id, profileId: profile.id },
+  });
   if (!current) {
     return NextResponse.json({ error: '포지션을 찾을 수 없습니다.' }, { status: 404 });
   }
@@ -97,13 +126,28 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
+  if (!profile) {
+    return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
+  }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   if (!id) {
     return NextResponse.json({ error: 'id가 필요합니다.' }, { status: 400 });
+  }
+
+  // Verify position belongs to user's profile
+  const existing = await prisma.targetPosition.findFirst({
+    where: { id, profileId: profile.id },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: '포지션을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   await prisma.targetPosition.delete({ where: { id } });

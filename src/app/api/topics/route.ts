@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { z } from 'zod';
 
 const createTopicSchema = z.object({
@@ -17,8 +17,8 @@ const updateTopicSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function GET() {
-  const auth = await requireAuth();
+export async function GET(request: NextRequest) {
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const topics = await prisma.topicConfig.findMany({
@@ -29,7 +29,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const body = await request.json();
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const body = await request.json();
@@ -71,7 +71,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const { searchParams } = new URL(request.url);

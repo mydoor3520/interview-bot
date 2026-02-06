@@ -7,42 +7,118 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ─── 사용자 기본 프로필 (하나만 존재) ───
-model UserProfile {
-  id                String      @id @default(cuid())
+// ─── 구독 등급 ───
+enum SubscriptionTier {
+  FREE
+  PRO
+}
 
-  // 기본 정보
-  name              String              // 이름
-  email             String?             // 이메일 (선택)
-  totalYearsExp     Int                 // 총 경력 연차
-  currentRole       String              // 현재 직무 (e.g., "백엔드 개발자")
-  currentCompany    String?             // 현재 회사명
+// ─── 결제 관련 Enums ───
+enum PaymentProvider {
+  STRIPE
+  PORTONE // Phase 7에서 활성화
+}
 
-  // 자기소개 & 이력
-  selfIntroduction  String?             // 자기소개서 텍스트
-  resumeText        String?             // 이력서 텍스트 (자유 형식)
-  strengths         String[]            // 본인이 생각하는 강점
-  weaknesses        String[]            // 본인이 생각하는 약점
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+  PAUSED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+// ─── 사용자 (인증 주체) ───
+model User {
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  passwordHash           String?
+  name                   String?
+  emailVerified          Boolean   @default(false)
+  emailVerifyToken       String?
+  emailVerifyTokenExpiry DateTime?
+  passwordResetToken     String?
+  passwordResetExpiry    DateTime?
+
+  // OAuth (Week 9에서 활성화)
+  oauthProvider   String?
+  oauthProviderId String?
+
+  // 구독
+  subscriptionTier    SubscriptionTier @default(FREE)
+  subscriptionId      String?
+  stripeCustomerId    String?          @unique
+  monthlySessionCount Int              @default(0)
 
   // 관계
-  skills            UserSkill[]         // 기술 스택 (숙련도 포함)
-  experiences       WorkExperience[]    // 경력 사항
-  targetPositions   TargetPosition[]    // 지원 회사/포지션
+  profile      UserProfile?
+  sessions     InterviewSession[]
+  usageLogs    AIUsageLog[]
+  subscription Subscription?
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  // 감사
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+
+  @@unique([oauthProvider, oauthProviderId])
+  @@index([email])
+  @@index([subscriptionTier])
+}
+
+// ─── 사용자 기본 프로필 (하나만 존재) ───
+model UserProfile {
+  id     String  @id @default(cuid())
+  userId String? @unique // User와 1:1 (nullable during migration)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 기본 정보
+  name           String // 이름
+  email          String? // 이메일 (선택)
+  totalYearsExp  Int // 총 경력 연차
+  currentRole    String // 현재 직무 (e.g., "백엔드 개발자")
+  currentCompany String? // 현재 회사명
+
+  // 자기소개 & 이력
+  selfIntroduction String? // 자기소개서 텍스트
+  resumeText       String? // 이력서 텍스트 (자유 형식)
+  strengths        String[] // 본인이 생각하는 강점
+  weaknesses       String[] // 본인이 생각하는 약점
+
+  // 관계
+  skills          UserSkill[] // 기술 스택 (숙련도 포함)
+  experiences     WorkExperience[] // 경력 사항
+  targetPositions TargetPosition[] // 지원 회사/포지션
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─── 기술 스택 (숙련도 포함) ───
 model UserSkill {
-  id            String      @id @default(cuid())
-  profileId     String
-  profile       UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  name          String          // 기술명 (e.g., "Java", "Spring Boot", "Kubernetes")
-  category      String          // 카테고리 (language / framework / database / infra / etc.)
-  proficiency   Int             // 숙련도 1-5 (1: 입문, 3: 중급, 5: 전문가)
-  yearsUsed     Int?            // 사용 연차
-  createdAt     DateTime    @default(now())
+  id          String      @id @default(cuid())
+  profileId   String
+  profile     UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name        String // 기술명 (e.g., "Java", "Spring Boot", "Kubernetes")
+  category    String // 카테고리 (language / framework / database / infra / etc.)
+  proficiency Int // 숙련도 1-5 (1: 입문, 3: 중급, 5: 전문가)
+  yearsUsed   Int? // 사용 연차
+  createdAt   DateTime    @default(now())
 
   @@unique([profileId, name])
   @@index([profileId, category])
@@ -50,131 +126,240 @@ model UserSkill {
 
 // ─── 경력 사항 ───
 model WorkExperience {
-  id            String      @id @default(cuid())
-  profileId     String
-  profile       UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  company       String          // 회사명
-  role          String          // 직무/직책
-  startDate     DateTime        // 시작일
-  endDate       DateTime?       // 종료일 (null = 재직중)
-  description   String?         // 업무 설명
-  techStack     String[]        // 사용 기술
-  achievements  String[]        // 주요 성과
-  orderIndex    Int             // 표시 순서
-  createdAt     DateTime    @default(now())
+  id           String      @id @default(cuid())
+  profileId    String
+  profile      UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company      String // 회사명
+  role         String // 직무/직책
+  startDate    DateTime // 시작일
+  endDate      DateTime? // 종료일 (null = 재직중)
+  description  String? // 업무 설명
+  techStack    String[] // 사용 기술
+  achievements String[] // 주요 성과
+  orderIndex   Int // 표시 순서
+  createdAt    DateTime    @default(now())
 }
 
 // ─── 지원 회사/포지션 (여러 개 관리 가능) ───
 model TargetPosition {
-  id            String      @id @default(cuid())
-  profileId     String
-  profile       UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  company       String          // 지원 회사명
-  position      String          // 포지션 (e.g., "시니어 백엔드 개발자")
-  jobDescription String?        // JD (Job Description) 텍스트
-  requirements  String[]        // 주요 요구사항
-  notes         String?         // 메모
-  isActive      Boolean     @default(true) // 활성 여부
-  sessions      InterviewSession[] // 이 포지션으로 진행한 면접들
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id             String             @id @default(cuid())
+  profileId      String
+  profile        UserProfile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company        String // 지원 회사명
+  position       String // 포지션 (e.g., "시니어 백엔드 개발자")
+  jobDescription String? // JD (Job Description) 텍스트
+  requirements   String[] // 주요 요구사항
+  notes          String? // 메모
+  isActive       Boolean            @default(true) // 활성 여부
+  sessions       InterviewSession[] // 이 포지션으로 진행한 면접들
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 }
 
 // ─── 면접 세션 ───
 model InterviewSession {
-  id              String      @id @default(cuid())
-  targetPositionId String?    // 지원 포지션 연결 (선택)
-  targetPosition  TargetPosition? @relation(fields: [targetPositionId], references: [id])
-  topics          String[]    // 선택한 주제들
-  difficulty      String      // junior / mid / senior
-  evaluationMode  String      // immediate / after_complete
-  status          String      // in_progress / completed / abandoned
-  questionCount   Int         @default(0)   // 총 질문 수 (캐싱 용도)
-  endReason       String?     // user_ended / all_topics_covered / error / timeout
-  totalScore      Float?      // 세션 평균 점수
-  summary         String?     // AI 생성 세션 요약
-  startedAt       DateTime    @default(now())
-  completedAt     DateTime?
-  deletedAt       DateTime?   // Soft Delete
-  questions       Question[]
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id               String          @id @default(cuid())
+  userId           String? // 세션 소유자 (nullable during migration)
+  user             User?           @relation(fields: [userId], references: [id])
+  targetPositionId String? // 지원 포지션 연결 (선택)
+  targetPosition   TargetPosition? @relation(fields: [targetPositionId], references: [id])
+  topics           String[] // 선택한 주제들
+  difficulty       String // junior / mid / senior
+  evaluationMode   String // immediate / after_complete
+  status           String // in_progress / completed / abandoned
+  questionCount    Int             @default(0) // 총 질문 수 (캐싱 용도)
+  endReason        String? // user_ended / all_topics_covered / error / timeout
+  totalScore       Float? // 세션 평균 점수
+  summary          String? // AI 생성 세션 요약
+  startedAt        DateTime        @default(now())
+  completedAt      DateTime?
+  deletedAt        DateTime? // Soft Delete
+  questions        Question[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@index([startedAt])
   @@index([targetPositionId, startedAt])
+  @@index([userId, startedAt])
 }
 
 // ─── 면접 질문 ───
 model Question {
-  id            String      @id @default(cuid())
-  sessionId     String
-  session       InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  orderIndex    Int         // 질문 순서
-  content       String      // 질문 내용
-  category      String      // 주제 카테고리
-  difficulty    String      // 난이도
-  status        String      @default("pending")  // pending / answered / skipped
-  userAnswer    String?     // 사용자 답변
-  evaluation    Evaluation?
-  followUps     FollowUp[]  // 꼬리질문들
-  answeredAt    DateTime?
-  createdAt     DateTime    @default(now())
+  id         String           @id @default(cuid())
+  sessionId  String
+  session    InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  orderIndex Int // 질문 순서
+  content    String // 질문 내용
+  category   String // 주제 카테고리
+  difficulty String // 난이도
+  status     String           @default("pending") // pending / answered / skipped
+  userAnswer String? // 사용자 답변
+  evaluation Evaluation?
+  followUps  FollowUp[] // 꼬리질문들
+  answeredAt DateTime?
+  createdAt  DateTime         @default(now())
 
-  @@index([sessionId, orderIndex])
+  @@unique([sessionId, orderIndex])
   @@index([sessionId, status])
 }
 
 // ─── 평가 ───
 model Evaluation {
-  id            String      @id @default(cuid())
-  questionId    String      @unique
-  question      Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  score         Int         // 1-10 점수
-  feedback      String      // AI 피드백
-  modelAnswer   String      // 모범 답안
-  strengths     String[]    // 강점
-  weaknesses    String[]    // 약점
-  evaluatedAt   DateTime    @default(now())
-  createdAt     DateTime    @default(now())
+  id          String   @id @default(cuid())
+  questionId  String   @unique
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  score       Int // 1-10 점수
+  feedback    String // AI 피드백
+  modelAnswer String // 모범 답안
+  strengths   String[] // 강점
+  weaknesses  String[] // 약점
+  evaluatedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
 
 // ─── 꼬리질문 ───
 model FollowUp {
-  id            String      @id @default(cuid())
-  questionId    String
-  question      Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  content       String      // 꼬리질문 내용
-  userAnswer    String?     // 사용자 답변
-  aiFeedback    String?     // AI 피드백
-  orderIndex    Int
-  createdAt     DateTime    @default(now())
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  content    String // 꼬리질문 내용
+  userAnswer String? // 사용자 답변
+  aiFeedback String? // AI 피드백
+  orderIndex Int
+  createdAt  DateTime @default(now())
 }
 
 // ─── 면접 주제 설정 ───
 model TopicConfig {
-  id            String      @id @default(cuid())
-  name          String      // 주제명 (e.g., "Java Concurrency")
-  category      String      // 카테고리 (e.g., "Java")
-  isPreset      Boolean     @default(false) // 프리셋 여부
-  isActive      Boolean     @default(true)
-  description   String?
-  createdAt     DateTime    @default(now())
+  id          String   @id @default(cuid())
+  name        String // 주제명 (e.g., "Java Concurrency")
+  category    String // 카테고리 (e.g., "Java")
+  isPreset    Boolean  @default(false) // 프리셋 여부
+  isActive    Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
 }
 
 // ─── 앱 설정 ───
 model AppConfig {
-  id            String      @id @default(cuid())
-  key           String      @unique
-  value         String
-  updatedAt     DateTime    @updatedAt
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 // ─── 로그인 시도 기록 (Rate Limiting 영속화) ───
 model LoginAttempt {
   id        String   @id @default(cuid())
-  ip        String       // 요청 IP 주소
-  success   Boolean      // 성공 여부
+  ip        String // 요청 IP 주소
+  success   Boolean // 성공 여부
+  userId    String? // 로그인 성공 시 사용자 ID
   createdAt DateTime @default(now())
 
   @@index([ip, createdAt])
+}
+
+// ─── AI 토큰 사용량 로그 ───
+model AIUsageLog {
+  id     String  @id @default(cuid())
+  userId String? // User ID (nullable, Phase 3에서 required로 변경)
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // 요청 컨텍스트
+  sessionId String? // 면접 세션 ID (nullable)
+  endpoint  String // "stream" | "evaluate" | "evaluate_batch"
+  model     String // 사용된 AI 모델명
+
+  // 토큰 사용량
+  promptTokens     Int // 입력 토큰 수
+  completionTokens Int // 출력 토큰 수
+  totalTokens      Int // 합계
+  estimated        Boolean @default(false) // 추정치 여부
+
+  // 요청 메타데이터
+  durationMs   Int? // 응답 소요 시간 (ms)
+  success      Boolean @default(true) // 성공 여부
+  errorMessage String? // 에러 발생 시 메시지
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@index([endpoint, createdAt])
+  @@index([model, createdAt])
+}
+
+// ─── 구독 (결제) ───
+model Subscription {
+  id         String @id @default(cuid())
+  userId     String @unique
+  user       User   @relation(fields: [userId], references: [id])
+
+  provider   PaymentProvider    @default(STRIPE)
+  externalId String // Stripe subscription ID
+  customerId String // Stripe customer ID
+
+  status       SubscriptionStatus @default(TRIALING)
+  tier         SubscriptionTier
+  billingCycle BillingCycle        @default(MONTHLY)
+
+  amount   Int    // 원 단위 (KRW)
+  currency String @default("KRW")
+
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  trialEnd           DateTime?
+  canceledAt         DateTime?
+  cancelReason       String?
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([externalId])
+  @@index([status])
+}
+
+// ─── 결제 기록 ───
+model Payment {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+
+  provider   PaymentProvider
+  externalId String // Stripe payment intent ID
+  amount     Int
+  currency   String
+  status     PaymentStatus
+
+  taxAmount      Int?
+  description    String?
+  receiptUrl     String?
+  failureReason  String?
+  refundedAmount Int?
+  refundedAt     DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([subscriptionId])
+  @@index([createdAt])
+}
+
+// ─── Webhook 이벤트 (멱등성) ───
+model WebhookEvent {
+  id         String          @id @default(cuid())
+  provider   PaymentProvider
+  eventType  String
+  externalId String          @unique // 이벤트 ID (멱등성 보장)
+  payload    Json
+  processed  Boolean         @default(false)
+  processedAt DateTime?
+  error      String?
+  retryCount Int             @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([processed, createdAt])
 }

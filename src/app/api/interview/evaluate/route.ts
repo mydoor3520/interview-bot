@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { createAIClient } from '@/lib/ai/client';
 import { buildEvaluationPrompt } from '@/lib/ai/prompts';
 import { checkAIRateLimit } from '@/lib/ai/rate-limit';
@@ -14,7 +14,7 @@ const evaluateRequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   // AI rate limit check
@@ -41,10 +41,10 @@ export async function POST(request: NextRequest) {
   if (questionId) {
     const question = await prisma.question.findUnique({
       where: { id: questionId },
-      include: { evaluation: true },
+      include: { evaluation: true, session: { select: { userId: true } } },
     });
 
-    if (!question) {
+    if (!question || question.session.userId !== auth.user.userId) {
       return NextResponse.json({ error: '질문을 찾을 수 없습니다.' }, { status: 404 });
     }
 
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Call AI for evaluation
-    const aiClient = createAIClient();
+    const aiClient = createAIClient({ sessionId: question.sessionId, endpoint: 'evaluate' });
     const evaluationMessages = buildEvaluationPrompt(
       question.content,
       question.userAnswer,
@@ -66,14 +66,14 @@ export async function POST(request: NextRequest) {
     );
 
     try {
-      const response = await aiClient.chat({
+      const { content } = await aiClient.chat({
         messages: evaluationMessages,
         model: process.env.AI_MODEL || 'claude-sonnet-4',
         temperature: 0.3,
       });
 
       // Parse JSON response
-      const jsonMatch = response.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+      const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
       if (!jsonMatch) {
         throw new Error('AI 응답에서 JSON을 찾을 수 없습니다.');
       }
@@ -104,8 +104,8 @@ export async function POST(request: NextRequest) {
 
   // Batch evaluation for entire session
   if (sessionId) {
-    const session = await prisma.interviewSession.findUnique({
-      where: { id: sessionId },
+    const session = await prisma.interviewSession.findFirst({
+      where: { id: sessionId, userId: auth.user.userId },
       include: {
         questions: {
           where: {
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const aiClient = createAIClient();
+    const aiClient = createAIClient({ sessionId: sessionId!, endpoint: 'evaluate_batch' });
     const evaluations = [];
     const errors = [];
 
@@ -135,13 +135,13 @@ export async function POST(request: NextRequest) {
           question.difficulty
         );
 
-        const response = await aiClient.chat({
+        const { content } = await aiClient.chat({
           messages: evaluationMessages,
           model: process.env.AI_MODEL || 'claude-sonnet-4',
           temperature: 0.3,
         });
 
-        const jsonMatch = response.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+        const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
         if (!jsonMatch) {
           throw new Error('AI 응답에서 JSON을 찾을 수 없습니다.');
         }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 
@@ -17,7 +17,7 @@ const querySchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const { searchParams } = new URL(request.url);
@@ -32,8 +32,8 @@ export async function GET(request: NextRequest) {
 
   // If sessionId is provided, return full session detail
   if (sessionId) {
-    const session = await prisma.interviewSession.findUnique({
-      where: { id: sessionId },
+    const session = await prisma.interviewSession.findFirst({
+      where: { id: sessionId, userId: auth.user.userId },
       include: {
         questions: {
           include: {
@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
   // Build filter conditions
   const where: Prisma.InterviewSessionWhereInput = {
     deletedAt: null,
+    userId: auth.user.userId,
   };
 
   if (topic) {
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const { searchParams } = new URL(request.url);
@@ -112,7 +113,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'id가 필요합니다.' }, { status: 400 });
   }
 
-  const session = await prisma.interviewSession.findUnique({ where: { id } });
+  const session = await prisma.interviewSession.findFirst({
+    where: { id, userId: auth.user.userId },
+  });
   if (!session) {
     return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
   }

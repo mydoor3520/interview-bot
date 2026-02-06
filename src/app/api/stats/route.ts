@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
   const { searchParams } = new URL(request.url);
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const questions = await prisma.question.findMany({
       where: {
         evaluation: { score: { lte: 6 } },
-        session: { deletedAt: null },
+        session: { deletedAt: null, userId: auth.user.userId },
       },
       include: {
         evaluation: true,
@@ -43,15 +43,23 @@ export async function GET(request: NextRequest) {
       where: {
         deletedAt: null,
         status: 'completed',
+        userId: auth.user.userId,
       },
     }),
 
     // Total questions
-    prisma.question.count(),
+    prisma.question.count({
+      where: {
+        session: { userId: auth.user.userId },
+      },
+    }),
 
     // Average score
     prisma.evaluation.aggregate({
       _avg: { score: true },
+      where: {
+        question: { session: { userId: auth.user.userId } },
+      },
     }),
 
     // Topic scores (group by category)
@@ -64,7 +72,7 @@ export async function GET(request: NextRequest) {
       FROM "Question" q
       JOIN "Evaluation" e ON e."questionId" = q.id
       JOIN "InterviewSession" s ON q."sessionId" = s.id
-      WHERE s."deletedAt" IS NULL
+      WHERE s."deletedAt" IS NULL AND s."userId" = ${auth.user.userId}
       GROUP BY q.category
       ORDER BY "avgScore" DESC
     `,
@@ -78,7 +86,7 @@ export async function GET(request: NextRequest) {
       FROM "InterviewSession" s
       JOIN "Question" q ON q."sessionId" = s.id
       JOIN "Evaluation" e ON e."questionId" = q.id
-      WHERE s."deletedAt" IS NULL AND s.status = 'completed'
+      WHERE s."deletedAt" IS NULL AND s.status = 'completed' AND s."userId" = ${auth.user.userId}
       GROUP BY s.difficulty
       ORDER BY "avgScore" DESC
     `,
@@ -95,7 +103,7 @@ export async function GET(request: NextRequest) {
         FROM "InterviewSession" s
         JOIN "Question" q ON q."sessionId" = s.id
         JOIN "Evaluation" e ON e."questionId" = q.id
-        WHERE s."deletedAt" IS NULL AND s."startedAt" >= ${thirtyDaysAgo}
+        WHERE s."deletedAt" IS NULL AND s."startedAt" >= ${thirtyDaysAgo} AND s."userId" = ${auth.user.userId}
         GROUP BY DATE(s."startedAt")
         ORDER BY date ASC
       `;
@@ -110,7 +118,7 @@ export async function GET(request: NextRequest) {
       FROM "Question" q
       JOIN "Evaluation" e ON e."questionId" = q.id
       JOIN "InterviewSession" s ON q."sessionId" = s.id
-      WHERE s."deletedAt" IS NULL
+      WHERE s."deletedAt" IS NULL AND s."userId" = ${auth.user.userId}
       GROUP BY q.category
       HAVING COUNT(*) >= 2
       ORDER BY "avgScore" ASC
@@ -122,6 +130,7 @@ export async function GET(request: NextRequest) {
       where: {
         deletedAt: null,
         status: 'completed',
+        userId: auth.user.userId,
       },
       include: {
         _count: { select: { questions: true } },

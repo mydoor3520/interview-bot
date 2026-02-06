@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { requireAuth } from '@/lib/auth/middleware';
+import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { z } from 'zod';
 
 const experienceSchema = z.object({
@@ -19,10 +19,12 @@ const updateExperienceSchema = experienceSchema.partial().extend({
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  const profile = await prisma.userProfile.findFirst();
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
   if (!profile) {
     return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
   }
@@ -50,8 +52,15 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
+  if (!profile) {
+    return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
+  }
 
   const body = await request.json();
   const result = updateExperienceSchema.safeParse(body);
@@ -60,6 +69,15 @@ export async function PUT(request: NextRequest) {
   }
 
   const { id, ...data } = result.data;
+
+  // Verify experience belongs to user's profile
+  const existing = await prisma.workExperience.findFirst({
+    where: { id, profileId: profile.id },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: '경력을 찾을 수 없습니다.' }, { status: 404 });
+  }
+
   const experience = await prisma.workExperience.update({
     where: { id },
     data,
@@ -69,13 +87,28 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAuth();
+  const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  const profile = await prisma.userProfile.findFirst({
+    where: { userId: auth.user.userId },
+  });
+  if (!profile) {
+    return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
+  }
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
   if (!id) {
     return NextResponse.json({ error: 'id가 필요합니다.' }, { status: 400 });
+  }
+
+  // Verify experience belongs to user's profile
+  const existing = await prisma.workExperience.findFirst({
+    where: { id, profileId: profile.id },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: '경력을 찾을 수 없습니다.' }, { status: 404 });
   }
 
   await prisma.workExperience.delete({ where: { id } });

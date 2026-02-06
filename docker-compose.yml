@@ -19,6 +19,21 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: interview-bot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: .
@@ -29,13 +44,19 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://interview:interview@db:5432/interview_bot
+      REDIS_URL: redis://redis:6379
       APP_PASSWORD: ${APP_PASSWORD:-changeme}
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       AI_PROXY_URL: http://host.docker.internal:3456
       AI_MODEL: ${AI_MODEL:-claude-sonnet-4}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS:-127.0.0.1}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-}
+      DISABLE_TOKEN_LOGGING: ${DISABLE_TOKEN_LOGGING:-false}
       NODE_ENV: production
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -43,3 +64,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
