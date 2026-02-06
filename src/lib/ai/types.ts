@@ -10,9 +10,20 @@ export interface AIStreamOptions {
   maxTokens?: number;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface AIChatResult {
+  content: string;
+  usage?: TokenUsage;
+}
+
 export interface AIClient {
   streamChat(options: AIStreamOptions): AsyncIterable<string>;
-  chat(options: AIStreamOptions): Promise<string>;
+  chat(options: AIStreamOptions): Promise<AIChatResult>;
 }
 
 export interface QuestionResponse {
