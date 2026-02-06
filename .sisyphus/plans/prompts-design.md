@@ -1031,7 +1031,7 @@ export function getApplicableTriggers(
 ### 7.1 토큰 예산 배분
 
 ```
-전체 컨텍스트 윈도우: 약 200,000 토큰 (claude-sonnet-4 기준)
+전체 컨텍스트 윈도우: 약 200,000 토큰 (claude-haiku-4.5 기준)
 실질 사용 가능: 약 150,000 토큰 (응답용 예약 제외)
 
 구성요소별 예산:

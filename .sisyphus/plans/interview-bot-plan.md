@@ -83,7 +83,7 @@ services:
       APP_PASSWORD: ${APP_PASSWORD:-changeme}
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       AI_PROXY_URL: http://host.docker.internal:3456
-      AI_MODEL: ${AI_MODEL:-claude-sonnet-4}
+      AI_MODEL: ${AI_MODEL:-claude-3-5-haiku-latest}
       NODE_ENV: production
     depends_on:
       db:
@@ -788,7 +788,7 @@ Behavioral:
 │           └── server.ts            # MSW 서버 설정
 ├── docs/
 │   └── PROXY_SETUP.md              # claude-max-api-proxy 설치/실행 가이드
-├── __tests__/
+├── tests/
 │   └── e2e/
 │       ├── auth.spec.ts             # 인증 E2E 테스트
 │       ├── onboarding.spec.ts       # 온보딩 E2E 테스트
@@ -886,11 +886,11 @@ Behavioral:
 - [ ] 로그아웃 API Route (쿠키 삭제)
 - [ ] Next.js 미들웨어 (보호 라우트)
 - [ ] 로그인 페이지 UI
-- [ ] **[TEST]** `src/lib/auth/__tests__/password.test.ts`: bcrypt 해싱/검증 테스트
-- [ ] **[TEST]** `src/lib/auth/__tests__/jwt.test.ts`: JWT 생성/만료/검증 테스트
-- [ ] **[TEST]** `src/lib/auth/__tests__/rate-limit.test.ts`: Rate Limiting 동작 테스트 (6번째 요청 시 429)
-- [ ] **[TEST]** `src/app/api/auth/__tests__/login.test.ts`: 로그인 API 통합 테스트
-- [ ] **[TEST]** `src/app/api/auth/__tests__/logout.test.ts`: 로그아웃 API 테스트 (쿠키 삭제 확인)
+- [ ] **[TEST]** `src/lib/auth/tests/password.test.ts`: bcrypt 해싱/검증 테스트
+- [ ] **[TEST]** `src/lib/auth/tests/jwt.test.ts`: JWT 생성/만료/검증 테스트
+- [ ] **[TEST]** `src/lib/auth/tests/rate-limit.test.ts`: Rate Limiting 동작 테스트 (6번째 요청 시 429)
+- [ ] **[TEST]** `src/app/api/auth/tests/login.test.ts`: 로그인 API 통합 테스트
+- [ ] **[TEST]** `src/app/api/auth/tests/logout.test.ts`: 로그아웃 API 테스트 (쿠키 삭제 확인)
 
 **생성 파일:**
 - `src/lib/auth/password.ts`
@@ -903,11 +903,11 @@ Behavioral:
 - `src/app/login/page.tsx`
 - `src/middleware.ts`
 - `src/hooks/useAuth.ts`
-- `src/lib/auth/__tests__/password.test.ts`
-- `src/lib/auth/__tests__/jwt.test.ts`
-- `src/lib/auth/__tests__/rate-limit.test.ts`
-- `src/app/api/auth/__tests__/login.test.ts`
-- `src/app/api/auth/__tests__/logout.test.ts`
+- `src/lib/auth/tests/password.test.ts`
+- `src/lib/auth/tests/jwt.test.ts`
+- `src/lib/auth/tests/rate-limit.test.ts`
+- `src/app/api/auth/tests/login.test.ts`
+- `src/app/api/auth/tests/logout.test.ts`
 
 ### Step 4: 사용자 프로필 시스템
 - [ ] 프로필 API Routes (CRUD)
@@ -918,11 +918,11 @@ Behavioral:
 - [ ] 프로필 관리 페이지 UI (각 섹션 편집)
 - [ ] 지원 포지션 관리 페이지 UI
 - [ ] 프로필 미설정 시 온보딩으로 리다이렉트 미들웨어
-- [ ] **[TEST]** `src/app/api/profile/__tests__/route.test.ts`: 프로필 CRUD API 테스트
-- [ ] **[TEST]** `src/app/api/profile/__tests__/skills.test.ts`: 스킬 관리 API 테스트
-- [ ] **[TEST]** `src/app/api/profile/__tests__/experiences.test.ts`: 경력 관리 API 테스트
-- [ ] **[TEST]** `src/app/api/positions/__tests__/route.test.ts`: 포지션 CRUD API 테스트
-- [ ] **[TEST]** `src/components/profile/__tests__/OnboardingWizard.test.tsx`: 온보딩 위자드 컴포넌트 테스트
+- [ ] **[TEST]** `src/app/api/profile/tests/route.test.ts`: 프로필 CRUD API 테스트
+- [ ] **[TEST]** `src/app/api/profile/tests/skills.test.ts`: 스킬 관리 API 테스트
+- [ ] **[TEST]** `src/app/api/profile/tests/experiences.test.ts`: 경력 관리 API 테스트
+- [ ] **[TEST]** `src/app/api/positions/tests/route.test.ts`: 포지션 CRUD API 테스트
+- [ ] **[TEST]** `src/components/profile/tests/OnboardingWizard.test.tsx`: 온보딩 위자드 컴포넌트 테스트
 
 **생성 파일:**
 - `src/app/api/profile/route.ts`
@@ -940,11 +940,11 @@ Behavioral:
 - `src/components/profile/StepIndicator.tsx`
 - `src/components/positions/PositionList.tsx`
 - `src/components/positions/PositionForm.tsx`
-- `src/app/api/profile/__tests__/route.test.ts`
-- `src/app/api/profile/__tests__/skills.test.ts`
-- `src/app/api/profile/__tests__/experiences.test.ts`
-- `src/app/api/positions/__tests__/route.test.ts`
-- `src/components/profile/__tests__/OnboardingWizard.test.tsx`
+- `src/app/api/profile/tests/route.test.ts`
+- `src/app/api/profile/tests/skills.test.ts`
+- `src/app/api/profile/tests/experiences.test.ts`
+- `src/app/api/positions/tests/route.test.ts`
+- `src/components/profile/tests/OnboardingWizard.test.tsx`
 
 **수정 파일:**
 - `src/middleware.ts` (온보딩 리다이렉트 로직 추가)
@@ -967,19 +967,19 @@ Behavioral:
 - [ ] 꼬리질문 프롬프트 (프로필 경험 기반 심화 질문)
 - [ ] 세션 요약 프롬프트
 - [ ] 지원 포지션 JD 기반 맞춤 질문 프롬프트
-- [ ] **[TEST]** `src/lib/ai/__tests__/prompts.test.ts`: 시스템 프롬프트 조합 테스트
-- [ ] **[TEST]** `src/lib/ai/__tests__/profile-to-context.test.ts`: 프로필 → 컨텍스트 변환 테스트 (토큰 예산 초과 시 축약 동작 포함)
-- [ ] **[TEST]** `src/lib/ai/__tests__/response-parser.test.ts`: AI 응답 JSON 파싱 테스트 (정상/비정상/fallback)
-- [ ] **[TEST]** `src/lib/ai/__tests__/token-counter.test.ts`: 토큰 추정 함수 테스트
+- [ ] **[TEST]** `src/lib/ai/tests/prompts.test.ts`: 시스템 프롬프트 조합 테스트
+- [ ] **[TEST]** `src/lib/ai/tests/profile-to-context.test.ts`: 프로필 → 컨텍스트 변환 테스트 (토큰 예산 초과 시 축약 동작 포함)
+- [ ] **[TEST]** `src/lib/ai/tests/response-parser.test.ts`: AI 응답 JSON 파싱 테스트 (정상/비정상/fallback)
+- [ ] **[TEST]** `src/lib/ai/tests/token-counter.test.ts`: 토큰 추정 함수 테스트
 
 **생성 파일:**
 - `src/lib/ai/prompts.ts`
 - `src/lib/ai/types.ts`
 - `src/lib/ai/profile-to-context.ts`
-- `src/lib/ai/__tests__/prompts.test.ts`
-- `src/lib/ai/__tests__/profile-to-context.test.ts`
-- `src/lib/ai/__tests__/response-parser.test.ts`
-- `src/lib/ai/__tests__/token-counter.test.ts`
+- `src/lib/ai/tests/prompts.test.ts`
+- `src/lib/ai/tests/profile-to-context.test.ts`
+- `src/lib/ai/tests/response-parser.test.ts`
+- `src/lib/ai/tests/token-counter.test.ts`
 
 > **Note**: 프롬프트 설계가 먼저 완료되어야 이후 AI API 호출 구현에서
 > 올바른 프롬프트 구조를 사용할 수 있으므로, API 연동(Step 6) 앞에 배치.
@@ -997,17 +997,17 @@ Behavioral:
 - [ ] 스트리밍 응답 파싱 로직
 - [ ] 에러 핸들링 (타임아웃, 프록시 다운)
 - [ ] 헬스체크 API (프록시 상태 확인)
-- [ ] **[TEST]** `src/lib/ai/__tests__/proxy-client.test.ts`: 프록시 클라이언트 테스트 (MSW로 모킹)
-- [ ] **[TEST]** `src/lib/ai/__tests__/client.test.ts`: AI 클라이언트 인터페이스 테스트
-- [ ] **[TEST]** `src/app/api/health/__tests__/route.test.ts`: 헬스체크 API 테스트 (프록시 up/down 시나리오)
+- [ ] **[TEST]** `src/lib/ai/tests/proxy-client.test.ts`: 프록시 클라이언트 테스트 (MSW로 모킹)
+- [ ] **[TEST]** `src/lib/ai/tests/client.test.ts`: AI 클라이언트 인터페이스 테스트
+- [ ] **[TEST]** `src/app/api/health/tests/route.test.ts`: 헬스체크 API 테스트 (프록시 up/down 시나리오)
 
 **생성 파일:**
 - `src/lib/ai/client.ts`
 - `src/lib/ai/proxy-client.ts`
 - `src/app/api/health/route.ts`
-- `src/lib/ai/__tests__/proxy-client.test.ts`
-- `src/lib/ai/__tests__/client.test.ts`
-- `src/app/api/health/__tests__/route.test.ts`
+- `src/lib/ai/tests/proxy-client.test.ts`
+- `src/lib/ai/tests/client.test.ts`
+- `src/app/api/health/tests/route.test.ts`
 
 ### Step 7: 레이아웃 & 네비게이션
 - [ ] MainLayout (사이드바 + 헤더)
@@ -1043,11 +1043,11 @@ Behavioral:
 - [ ] "다음 질문" / "질문 스킵" / "면접 종료" 버튼
 - [ ] 스트리밍 API Route 구현
 - [ ] useInterviewStream 훅
-- [ ] **[TEST]** `src/hooks/__tests__/useInterviewStream.test.ts`: 스트리밍 훅 테스트 (MSW)
-- [ ] **[TEST]** `src/components/interview/__tests__/ChatMessage.test.tsx`: 메시지 컴포넌트 테스트
-- [ ] **[TEST]** `src/components/interview/__tests__/StreamingText.test.tsx`: 스트리밍 텍스트 렌더링 테스트
-- [ ] **[TEST]** `src/components/interview/__tests__/EvaluationCard.test.tsx`: 평가 카드 컴포넌트 테스트
-- [ ] **[TEST]** `src/app/api/interview/__tests__/stream.test.ts`: 스트리밍 API Route 통합 테스트
+- [ ] **[TEST]** `src/hooks/tests/useInterviewStream.test.ts`: 스트리밍 훅 테스트 (MSW)
+- [ ] **[TEST]** `src/components/interview/tests/ChatMessage.test.tsx`: 메시지 컴포넌트 테스트
+- [ ] **[TEST]** `src/components/interview/tests/StreamingText.test.tsx`: 스트리밍 텍스트 렌더링 테스트
+- [ ] **[TEST]** `src/components/interview/tests/EvaluationCard.test.tsx`: 평가 카드 컴포넌트 테스트
+- [ ] **[TEST]** `src/app/api/interview/tests/stream.test.ts`: 스트리밍 API Route 통합 테스트
 
 **생성 파일:**
 - `src/app/interview/[sessionId]/page.tsx`
@@ -1057,11 +1057,11 @@ Behavioral:
 - `src/components/interview/EvaluationCard.tsx`
 - `src/app/api/interview/stream/route.ts`
 - `src/hooks/useInterviewStream.ts`
-- `src/hooks/__tests__/useInterviewStream.test.ts`
-- `src/components/interview/__tests__/ChatMessage.test.tsx`
-- `src/components/interview/__tests__/StreamingText.test.tsx`
-- `src/components/interview/__tests__/EvaluationCard.test.tsx`
-- `src/app/api/interview/__tests__/stream.test.ts`
+- `src/hooks/tests/useInterviewStream.test.ts`
+- `src/components/interview/tests/ChatMessage.test.tsx`
+- `src/components/interview/tests/StreamingText.test.tsx`
+- `src/components/interview/tests/EvaluationCard.test.tsx`
+- `src/app/api/interview/tests/stream.test.ts`
 
 ### Step 9.5: 스트리밍 검증
 - [ ] AI 응답 스트리밍이 정상적으로 실시간 표시되는지 확인
@@ -1075,8 +1075,8 @@ Behavioral:
 - [ ] 종료 후 평가 모드: 일괄 평가 생성
 - [ ] 세션 요약 생성 (AI)
 - [ ] 세션 결과 화면 (총점, 주제별 점수, 요약)
-- [ ] **[TEST]** `src/app/api/interview/__tests__/evaluate.test.ts`: 평가 생성 API 테스트
-- [ ] **[TEST]** `src/components/interview/__tests__/SessionSummary.test.tsx`: 세션 요약 컴포넌트 테스트
+- [ ] **[TEST]** `src/app/api/interview/tests/evaluate.test.ts`: 평가 생성 API 테스트
+- [ ] **[TEST]** `src/components/interview/tests/SessionSummary.test.tsx`: 세션 요약 컴포넌트 테스트
 
 **생성 파일:**
 - `src/components/interview/SessionSummary.tsx`
@@ -1097,8 +1097,8 @@ Behavioral:
 - [ ] 세션 목록 페이지 (필터, 정렬)
 - [ ] 세션 상세 페이지 (질문/답변/평가 확인)
 - [ ] 세션 삭제 (Soft Delete: deletedAt 설정)
-- [ ] **[TEST]** `src/app/api/history/__tests__/route.test.ts`: 히스토리 API 테스트 (Soft Delete 포함)
-- [ ] **[TEST]** `src/components/history/__tests__/SessionList.test.tsx`: 세션 목록 컴포넌트 테스트
+- [ ] **[TEST]** `src/app/api/history/tests/route.test.ts`: 히스토리 API 테스트 (Soft Delete 포함)
+- [ ] **[TEST]** `src/components/history/tests/SessionList.test.tsx`: 세션 목록 컴포넌트 테스트
 
 **생성 파일:**
 - `src/app/history/page.tsx`
@@ -1112,8 +1112,8 @@ Behavioral:
 - [ ] 주제별 평균 점수 테이블
 - [ ] 최근 추세 차트 (Recharts)
 - [ ] 약점 주제 Top 5
-- [ ] **[TEST]** `src/app/api/stats/__tests__/route.test.ts`: 통계 API 테스트
-- [ ] **[TEST]** `src/components/dashboard/__tests__/StatsCard.test.tsx`: 통계 카드 컴포넌트 테스트
+- [ ] **[TEST]** `src/app/api/stats/tests/route.test.ts`: 통계 API 테스트
+- [ ] **[TEST]** `src/components/dashboard/tests/StatsCard.test.tsx`: 통계 카드 컴포넌트 테스트
 
 **생성 파일:**
 - `src/app/dashboard/page.tsx`
@@ -1174,10 +1174,10 @@ Behavioral:
 - [ ] GitHub Actions CI 파이프라인 테스트 통과 확인
 
 **E2E 테스트 시나리오**:
-- `__tests__/e2e/auth.spec.ts`: 로그인 → 대시보드 → 로그아웃 플로우
-- `__tests__/e2e/onboarding.spec.ts`: 최초 진입 → 온보딩 4단계 → 프로필 완성
-- `__tests__/e2e/interview-flow.spec.ts`: 세션 설정 → 면접 진행 → 평가 → 종료
-- `__tests__/e2e/history.spec.ts`: 히스토리 조회 → 상세 → 삭제 (Soft Delete)
+- `tests/e2e/auth.spec.ts`: 로그인 → 대시보드 → 로그아웃 플로우
+- `tests/e2e/onboarding.spec.ts`: 최초 진입 → 온보딩 4단계 → 프로필 완성
+- `tests/e2e/interview-flow.spec.ts`: 세션 설정 → 면접 진행 → 평가 → 종료
+- `tests/e2e/history.spec.ts`: 히스토리 조회 → 상세 → 삭제 (Soft Delete)
 
 ## 8. Phase 2 (향후 확장)
 
@@ -1247,7 +1247,7 @@ JWT_EXPIRES_IN=7d
 
 # AI Proxy
 AI_PROXY_URL=http://host.docker.internal:3456
-AI_MODEL=claude-sonnet-4
+AI_MODEL=claude-3-5-haiku-latest
 
 # App
 NEXT_PUBLIC_APP_NAME=Interview Bot
