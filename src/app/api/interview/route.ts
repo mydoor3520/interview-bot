@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db/prisma';
 import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
+import { checkSessionLimit } from '@/lib/feature-gate';
+import type { TierKey } from '@/lib/feature-gate';
 
 const createSessionSchema = z.object({
   targetPositionId: z.string().nullish().transform(v => v ?? undefined),
@@ -23,6 +25,16 @@ const updateSessionSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  // Session quota check
+  const tier = auth.user.tier as TierKey;
+  const quota = await checkSessionLimit(auth.user.userId, tier);
+  if (!quota.allowed) {
+    return NextResponse.json(
+      { error: quota.message, upgradeUrl: '/pricing' },
+      { status: 403 }
+    );
+  }
 
   const body = await request.json();
   const result = createSessionSchema.safeParse(body);

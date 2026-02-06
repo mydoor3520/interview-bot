@@ -280,6 +280,8 @@ model AIUsageLog {
   durationMs   Int? // 응답 소요 시간 (ms)
   success      Boolean @default(true) // 성공 여부
   errorMessage String? // 에러 발생 시 메시지
+  cost         Float?  // 예상 비용 (USD)
+  tier         String? // 사용자 구독 등급
 
   createdAt DateTime @default(now())
 

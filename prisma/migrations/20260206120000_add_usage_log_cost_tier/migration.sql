@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "AIUsageLog" ADD COLUMN "cost" DOUBLE PRECISION;
+ALTER TABLE "AIUsageLog" ADD COLUMN "tier" TEXT;
