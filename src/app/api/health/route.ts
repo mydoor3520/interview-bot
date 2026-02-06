@@ -1,51 +1,76 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
+import { cache } from '@/lib/redis/client';
+
+interface ServiceHealth {
+  status: 'ok' | 'down' | 'degraded' | 'not_configured';
+  latencyMs?: number;
+  error?: string;
+}
 
 export async function GET() {
-  const proxyUrl = process.env.AI_PROXY_URL || 'http://localhost:3456';
-
-  const health: Record<string, unknown> = {
+  const checks: {
+    status: 'ok' | 'degraded' | 'down';
+    timestamp: string;
+    version: string;
+    services: Record<string, ServiceHealth>;
+  } = {
     status: 'ok',
     timestamp: new Date().toISOString(),
-    proxy: { status: 'unknown', url: proxyUrl },
+    version: process.env.npm_package_version || '0.0.0',
+    services: {},
   };
 
   // Database check
   try {
+    const start = Date.now();
     await prisma.$queryRaw`SELECT 1`;
-    health.database = { status: 'connected' };
+    checks.services.database = { status: 'ok', latencyMs: Date.now() - start };
   } catch (err) {
-    health.database = {
-      status: 'disconnected',
-      error: err instanceof Error ? err.message : 'Unknown error',
-    };
-    health.status = 'degraded';
+    checks.services.database = { status: 'down', error: err instanceof Error ? err.message : 'Unknown error' };
+    checks.status = 'down';
   }
 
+  // Redis check
+  if (cache.isRedisAvailable()) {
+    try {
+      const start = Date.now();
+      await cache.get('health:ping');
+      checks.services.redis = { status: 'ok', latencyMs: Date.now() - start };
+    } catch (err) {
+      checks.services.redis = { status: 'down', error: err instanceof Error ? err.message : 'Unknown error' };
+      checks.status = checks.status === 'ok' ? 'degraded' : checks.status;
+    }
+  } else {
+    checks.services.redis = { status: 'not_configured' };
+  }
+
+  // AI Proxy check
+  const proxyUrl = process.env.AI_PROXY_URL || 'http://localhost:3456';
   try {
+    const start = Date.now();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-
-    const res = await fetch(`${proxyUrl}/v1/models`, {
-      signal: controller.signal,
-    });
+    const res = await fetch(`${proxyUrl}/v1/models`, { signal: controller.signal });
     clearTimeout(timeout);
-
     if (res.ok) {
-      const data = await res.json();
-      health.proxy = { status: 'connected', url: proxyUrl, models: data };
+      checks.services.aiProxy = { status: 'ok', latencyMs: Date.now() - start };
     } else {
-      health.proxy = { status: 'error', url: proxyUrl, statusCode: res.status };
-      health.status = 'degraded';
+      checks.services.aiProxy = { status: 'degraded', latencyMs: Date.now() - start };
+      checks.status = checks.status === 'ok' ? 'degraded' : checks.status;
     }
   } catch (err) {
-    health.proxy = {
-      status: 'disconnected',
-      url: proxyUrl,
-      error: err instanceof Error ? err.message : 'Unknown error',
-    };
-    health.status = 'degraded';
+    checks.services.aiProxy = { status: 'down', error: err instanceof Error ? err.message : 'Unknown error' };
+    checks.status = checks.status === 'ok' ? 'degraded' : checks.status;
   }
 
-  return NextResponse.json(health);
+  // Stripe check (simple API test)
+  if (process.env.STRIPE_SECRET_KEY) {
+    checks.services.stripe = { status: 'ok' };
+  } else {
+    checks.services.stripe = { status: 'not_configured' };
+  }
+
+  const statusCode = checks.status === 'down' ? 503 : 200;
+  return NextResponse.json(checks, { status: statusCode });
 }

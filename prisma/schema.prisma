@@ -369,3 +369,19 @@ model WebhookEvent {
 
   @@index([processed, createdAt])
 }
+
+// ─── 감사 로그 ───
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String   // e.g., "subscription.created", "payment.refunded", "user.login"
+  resource   String   // e.g., "subscription", "payment", "user"
+  resourceId String?  // ID of the affected resource
+  details    Json?    // Additional context
+  ip         String?  // Request IP
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([resource, resourceId])
+}
