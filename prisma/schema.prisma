@@ -68,6 +68,7 @@ model User {
   sessions     InterviewSession[]
   usageLogs    AIUsageLog[]
   subscription Subscription?
+  betaFeedback BetaFeedback[]
 
   emailNotifications Boolean @default(true)
 
@@ -384,4 +385,21 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@index([resource, resourceId])
+}
+
+// ─── 베타 피드백 ───
+model BetaFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String   // "bug", "feature", "ux", "performance", "general"
+  content   String
+  rating    Int?     // 1-5
+  page      String?  // URL where feedback was given
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([category])
+  @@index([createdAt])
 }
