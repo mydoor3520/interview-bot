@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { z } from 'zod';
+import { checkUserRateLimit } from '@/lib/auth/user-rate-limit';
 
 const createProfileSchema = z.object({
   name: z.string().min(2).max(50),
@@ -22,78 +23,111 @@ export async function GET(request: NextRequest) {
   const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  const profile = await prisma.userProfile.findFirst({
-    where: { userId: auth.user.userId },
-    include: {
-      skills: { orderBy: { createdAt: 'desc' } },
-      experiences: { orderBy: { orderIndex: 'asc' } },
-      targetPositions: { orderBy: { createdAt: 'desc' } },
-    },
-  });
+  try {
+    const profile = await prisma.userProfile.findFirst({
+      where: { userId: auth.user.userId },
+      include: {
+        skills: { orderBy: { createdAt: 'desc' } },
+        experiences: { orderBy: { orderIndex: 'asc' } },
+        targetPositions: { orderBy: { createdAt: 'desc' } },
+      },
+    });
 
-  if (!profile) {
-    return NextResponse.json({ profile: null }, { status: 200 });
+    if (!profile) {
+      return NextResponse.json({ profile: null }, { status: 200 });
+    }
+
+    return NextResponse.json({ profile });
+  } catch (error) {
+    console.error('API error:', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
-
-  return NextResponse.json({ profile });
 }
 
 export async function POST(request: NextRequest) {
   const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  // Check if profile already exists
-  const existing = await prisma.userProfile.findFirst({
-    where: { userId: auth.user.userId },
-  });
-  if (existing) {
-    return NextResponse.json({ error: '프로필이 이미 존재합니다.' }, { status: 409 });
+  // Rate limit check: 20 requests per minute for profile mutations
+  const rateLimit = checkUserRateLimit(auth.user.userId, 'profile-mutation', 20);
+  if (rateLimit) {
+    return NextResponse.json(
+      { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+    );
   }
 
-  const body = await request.json();
-  const result = createProfileSchema.safeParse(body);
-  if (!result.success) {
-    return NextResponse.json({ error: '입력 데이터가 올바르지 않습니다.', details: result.error.issues }, { status: 400 });
+  try {
+    // Check if profile already exists
+    const existing = await prisma.userProfile.findFirst({
+      where: { userId: auth.user.userId },
+    });
+    if (existing) {
+      return NextResponse.json({ error: '프로필이 이미 존재합니다.' }, { status: 409 });
+    }
+
+    const body = await request.json();
+    const result = createProfileSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json({ error: '입력 데이터가 올바르지 않습니다.', details: result.error.issues }, { status: 400 });
+    }
+
+    const profile = await prisma.userProfile.create({
+      data: { ...result.data, userId: auth.user.userId },
+      include: {
+        skills: true,
+        experiences: true,
+        targetPositions: true,
+      },
+    });
+
+    return NextResponse.json({ profile }, { status: 201 });
+  } catch (error) {
+    console.error('API error:', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
-
-  const profile = await prisma.userProfile.create({
-    data: { ...result.data, userId: auth.user.userId },
-    include: {
-      skills: true,
-      experiences: true,
-      targetPositions: true,
-    },
-  });
-
-  return NextResponse.json({ profile }, { status: 201 });
 }
 
 export async function PUT(request: NextRequest) {
   const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
 
-  const profile = await prisma.userProfile.findFirst({
-    where: { userId: auth.user.userId },
-  });
-  if (!profile) {
-    return NextResponse.json({ error: '프로필이 존재하지 않습니다.' }, { status: 404 });
+  // Rate limit check: 20 requests per minute for profile mutations
+  const rateLimit = checkUserRateLimit(auth.user.userId, 'profile-mutation', 20);
+  if (rateLimit) {
+    return NextResponse.json(
+      { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+    );
   }
 
-  const body = await request.json();
-  const result = updateProfileSchema.safeParse(body);
-  if (!result.success) {
-    return NextResponse.json({ error: '입력 데이터가 올바르지 않습니다.', details: result.error.issues }, { status: 400 });
+  try {
+    const profile = await prisma.userProfile.findFirst({
+      where: { userId: auth.user.userId },
+    });
+    if (!profile) {
+      return NextResponse.json({ error: '프로필이 존재하지 않습니다.' }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const result = updateProfileSchema.safeParse(body);
+    if (!result.success) {
+      return NextResponse.json({ error: '입력 데이터가 올바르지 않습니다.', details: result.error.issues }, { status: 400 });
+    }
+
+    const updated = await prisma.userProfile.update({
+      where: { id: profile.id },
+      data: result.data,
+      include: {
+        skills: true,
+        experiences: true,
+        targetPositions: true,
+      },
+    });
+
+    return NextResponse.json({ profile: updated });
+  } catch (error) {
+    console.error('API error:', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
-
-  const updated = await prisma.userProfile.update({
-    where: { id: profile.id },
-    data: result.data,
-    include: {
-      skills: true,
-      experiences: true,
-      targetPositions: true,
-    },
-  });
-
-  return NextResponse.json({ profile: updated });
 }
