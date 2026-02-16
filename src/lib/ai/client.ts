@@ -1,119 +1,128 @@
-import { AIClient, AIChatResult, AIStreamOptions } from './types';
+import { AIClient, AIChatResult, AIStreamOptions, AIMessage, AIContentBlock } from './types';
 import { countTokens, countMessagesTokens } from './token-counter';
 import { logTokenUsage } from './usage-logger';
+import { env } from '@/lib/env';
+import { getProviders, AIProvider } from './providers';
+import { healthMonitor } from './health-monitor';
+
+/**
+ * Helper: Detect if messages contain Vision content (image_url blocks)
+ * Proxy doesn't support multimodal blocks, so skip fallback for Vision requests
+ */
+function containsVisionContent(messages: AIMessage[]): boolean {
+  return messages.some(m =>
+    Array.isArray(m.content) &&
+    (m.content as AIContentBlock[]).some(b => b.type === 'image_url')
+  );
+}
+
+/**
+ * Helper: Select provider based on health status
+ */
+function selectProvider(primary: AIProvider, fallback: AIProvider | null): AIProvider {
+  if (healthMonitor.shouldTryProvider(primary.name)) return primary;
+  if (fallback && healthMonitor.shouldTryProvider(fallback.name)) return fallback;
+  return primary; // Default to primary even if down (might recover)
+}
+
+/**
+ * Helper: Get the other provider (for fallback attempt)
+ */
+function getOtherProvider(current: AIProvider, primary: AIProvider, fallback: AIProvider | null): AIProvider | null {
+  if (!fallback) return null;
+  return current.name === primary.name ? fallback : primary;
+}
 
 export function createAIClient(context?: {
   sessionId?: string;
-  endpoint: 'stream' | 'evaluate' | 'evaluate_batch';
+  endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse';
 }): AIClient {
-  const proxyUrl = process.env.AI_PROXY_URL || 'http://localhost:3456';
-  const model = process.env.AI_MODEL || 'claude-sonnet-4';
+  const { primary, fallback } = getProviders();
 
-  const baseClient: AIClient = {
+  const fallbackClient: AIClient = {
     async *streamChat(options: AIStreamOptions): AsyncIterable<string> {
-      const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: options.model || model,
-          messages: options.messages,
-          temperature: options.temperature ?? 0.7,
-          max_tokens: options.maxTokens ?? 4096,
-          stream: true,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(`AI API 인증 실패 (${response.status}): API 키를 확인하세요. ${errorText}`);
-        } else if (response.status === 429) {
-          throw new Error(`AI API 요청 한도 초과 (429): 잠시 후 다시 시도하세요. ${errorText}`);
-        } else if (response.status >= 500) {
-          throw new Error(`AI 서버 오류 (${response.status}): ${errorText}`);
-        }
-        throw new Error(`AI API 오류 (${response.status}): ${errorText}`);
-      }
-
-      if (!response.body) {
-        throw new Error('AI 서버에서 응답 본문이 비어있습니다.');
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      // Determine which provider to use based on health
+      const provider = selectProvider(primary, fallback);
+      const startTime = Date.now();
 
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        for await (const chunk of provider.client.streamChat(options)) {
+          yield chunk;
+        }
+        healthMonitor.recordSuccess(provider.name, Date.now() - startTime);
+      } catch (err) {
+        healthMonitor.recordFailure(provider.name, err instanceof Error ? err.message : 'Unknown');
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+        // Try fallback only if this was the primary and fallback exists and is available
+        // Skip fallback for Vision requests (proxy doesn't support multimodal blocks)
+        const other = getOtherProvider(provider, primary, fallback);
+        if (other && healthMonitor.shouldTryProvider(other.name) && !containsVisionContent(options.messages)) {
+          console.warn(JSON.stringify({
+            event: 'ai_fallback',
+            from: provider.name,
+            to: other.name,
+            reason: err instanceof Error ? err.message : 'Unknown',
+            timestamp: new Date().toISOString()
+          }));
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data: ')) continue;
-            const data = trimmed.slice(6);
-            if (data === '[DONE]') return;
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) yield content;
-            } catch {
-              // Skip malformed JSON
+          const fbStartTime = Date.now();
+          try {
+            for await (const chunk of other.client.streamChat(options)) {
+              yield chunk;
             }
+            healthMonitor.recordSuccess(other.name, Date.now() - fbStartTime);
+            return; // Success via fallback
+          } catch (fbErr) {
+            healthMonitor.recordFailure(other.name, fbErr instanceof Error ? fbErr.message : 'Unknown');
+            throw fbErr; // Both failed
           }
         }
-      } finally {
-        reader.releaseLock();
+        throw err; // No fallback available
       }
     },
 
     async chat(options: AIStreamOptions): Promise<AIChatResult> {
-      const response = await fetch(`${proxyUrl}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: options.model || model,
-          messages: options.messages,
-          temperature: options.temperature ?? 0.7,
-          max_tokens: options.maxTokens ?? 4096,
-          stream: false,
-        }),
-      });
+      const provider = selectProvider(primary, fallback);
+      const startTime = Date.now();
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(`AI API 인증 실패 (${response.status}): API 키를 확인하세요. ${errorText}`);
-        } else if (response.status === 429) {
-          throw new Error(`AI API 요청 한도 초과 (429): 잠시 후 다시 시도하세요. ${errorText}`);
-        } else if (response.status >= 500) {
-          throw new Error(`AI 서버 오류 (${response.status}): ${errorText}`);
+      try {
+        const result = await provider.client.chat(options);
+        healthMonitor.recordSuccess(provider.name, Date.now() - startTime);
+        return result;
+      } catch (err) {
+        healthMonitor.recordFailure(provider.name, err instanceof Error ? err.message : 'Unknown');
+
+        // Skip fallback for Vision requests (proxy doesn't support multimodal blocks)
+        const other = getOtherProvider(provider, primary, fallback);
+        if (other && healthMonitor.shouldTryProvider(other.name) && !containsVisionContent(options.messages)) {
+          console.warn(JSON.stringify({
+            event: 'ai_fallback',
+            from: provider.name,
+            to: other.name,
+            reason: err instanceof Error ? err.message : 'Unknown',
+            timestamp: new Date().toISOString()
+          }));
+
+          const fbStartTime = Date.now();
+          try {
+            const result = await other.client.chat(options);
+            healthMonitor.recordSuccess(other.name, Date.now() - fbStartTime);
+            return result;
+          } catch (fbErr) {
+            healthMonitor.recordFailure(other.name, fbErr instanceof Error ? fbErr.message : 'Unknown');
+            throw fbErr;
+          }
         }
-        throw new Error(`AI API 오류 (${response.status}): ${errorText}`);
+        throw err;
       }
-
-      const data = await response.json();
-      return {
-        content: data.choices?.[0]?.message?.content || '',
-        usage: data.usage ? {
-          promptTokens: data.usage.prompt_tokens || 0,
-          completionTokens: data.usage.completion_tokens || 0,
-          totalTokens: data.usage.total_tokens || 0,
-        } : undefined,
-      };
     },
   };
 
   // Wrap with logging if context is provided
   if (context && process.env.DISABLE_TOKEN_LOGGING !== 'true') {
-    return wrapWithLogging(baseClient, context);
+    return wrapWithLogging(fallbackClient, context);
   }
-  return baseClient;
+  return fallbackClient;
 }
 
 /**
@@ -130,7 +139,7 @@ function trackLogPromise(promise: Promise<void>): void {
 
 function wrapWithLogging(
   client: AIClient,
-  context: { sessionId?: string; endpoint: 'stream' | 'evaluate' | 'evaluate_batch' }
+  context: { sessionId?: string; endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' }
 ): AIClient {
   return {
     async *streamChat(options: AIStreamOptions): AsyncIterable<string> {
@@ -156,7 +165,7 @@ function wrapWithLogging(
       } finally {
         const logPromise = logTokenUsage({
           ...context,
-          model: options.model || process.env.AI_MODEL || 'unknown',
+          model: options.model || env.AI_MODEL,
           promptTokens: inputTokens,
           completionTokens: countTokens(outputText),
           estimated: true,
@@ -177,7 +186,7 @@ function wrapWithLogging(
 
         const logPromise = logTokenUsage({
           ...context,
-          model: options.model || process.env.AI_MODEL || 'unknown',
+          model: options.model || env.AI_MODEL,
           promptTokens: result.usage?.promptTokens ?? countMessagesTokens(options.messages),
           completionTokens: result.usage?.completionTokens ?? countTokens(result.content),
           estimated,
@@ -191,7 +200,7 @@ function wrapWithLogging(
 
         const logPromise = logTokenUsage({
           ...context,
-          model: options.model || process.env.AI_MODEL || 'unknown',
+          model: options.model || env.AI_MODEL,
           promptTokens: countMessagesTokens(options.messages),
           completionTokens: 0,
           estimated: true,
