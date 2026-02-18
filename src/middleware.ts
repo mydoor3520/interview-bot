@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { validateOrigin } from '@/lib/auth/csrf';
 
-const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/api/auth', '/api/webhooks'];
+const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/api/auth', '/api/webhooks', '/api/health', '/api/cron', '/api/demo', '/legal', '/pricing', '/demo', '/robots.txt', '/sitemap.xml'];
 const STATIC_PATHS = ['/_next', '/favicon.ico', '/next.svg', '/vercel.svg', '/globe.svg', '/window.svg', '/file.svg'];
 
 /**
@@ -12,6 +12,12 @@ const STATIC_PATHS = ['/_next', '/favicon.ico', '/next.svg', '/vercel.svg', '/gl
  * 설정되지 않은 경우 X-Forwarded-For를 그대로 사용합니다 (리버스 프록시 뒤에서만 사용).
  */
 function getClientIp(request: NextRequest): string {
+  // Cloudflare Tunnel sets CF-Connecting-IP to the real client IP
+  const cfConnectingIp = request.headers.get('cf-connecting-ip');
+  if (cfConnectingIp) {
+    return cfConnectingIp;
+  }
+
   const trustedProxies = process.env.TRUSTED_PROXY_IPS;
 
   if (trustedProxies) {
@@ -81,6 +87,7 @@ export async function middleware(request: NextRequest) {
     // Skip CSRF for webhooks, crons, and initial auth endpoints
     const skipCsrf = pathname.startsWith('/api/webhooks/') ||
                      pathname.startsWith('/api/cron/') ||
+                     pathname.startsWith('/api/demo/') ||
                      pathname === '/api/auth/login' ||
                      pathname === '/api/auth/signup';
 
@@ -109,6 +116,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Landing page is public
+  if (pathname === '/') {
+    return NextResponse.next();
+  }
+
   // Skip public paths
   if (PUBLIC_PATHS.some(path => pathname.startsWith(path))) {
     // Authenticated user visiting login/signup -> redirect to dashboard
@@ -125,16 +137,49 @@ export async function middleware(request: NextRequest) {
         } catch { /* Token invalid, show login page */ }
       }
     }
+
+    // For public API paths, still inject user context if token exists
+    // (needed for endpoints like resend-verification that require auth)
+    if (pathname.startsWith('/api/auth/') && pathname !== '/api/auth/login' && pathname !== '/api/auth/signup') {
+      const token = request.cookies.get('token')?.value;
+      if (token && jwtSecret) {
+        try {
+          const secret = new TextEncoder().encode(jwtSecret);
+          const { payload } = await jwtVerify(token, secret);
+          if (payload.version === 2 && payload.userId) {
+            const requestHeaders = new Headers(request.headers);
+            requestHeaders.set('x-user-id', payload.userId as string);
+            requestHeaders.set('x-user-email', (payload.email as string) || '');
+            requestHeaders.set('x-user-tier', (payload.tier as string) || 'FREE');
+            requestHeaders.set('x-user-is-admin', String((payload.isAdmin as boolean) ?? false));
+            return NextResponse.next({ request: { headers: requestHeaders } });
+          }
+        } catch { /* Token invalid, proceed without headers */ }
+      }
+    }
+
     return NextResponse.next();
   }
 
   // Protected routes - require authentication
   const token = request.cookies.get('token')?.value;
   if (!token) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: '인증이 만료되었습니다. 다시 로그인해주세요.', code: 'SESSION_EXPIRED' },
+        { status: 401 }
+      );
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
   if (!jwtSecret) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: '서버 인증 설정 오류', code: 'AUTH_CONFIG_ERROR' },
+        { status: 401 }
+      );
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -144,6 +189,14 @@ export async function middleware(request: NextRequest) {
 
     // V1 token detection -> force re-login
     if (!payload.version || payload.version !== 2 || !payload.userId) {
+      if (pathname.startsWith('/api/')) {
+        const response = NextResponse.json(
+          { error: '인증이 만료되었습니다. 다시 로그인해주세요.', code: 'SESSION_EXPIRED' },
+          { status: 401 }
+        );
+        response.cookies.set('token', '', { maxAge: 0, path: '/' });
+        return response;
+      }
       const response = NextResponse.redirect(new URL('/login?reason=upgrade', request.url));
       response.cookies.set('token', '', { maxAge: 0, path: '/' });
       return response;
@@ -155,11 +208,36 @@ export async function middleware(request: NextRequest) {
     requestHeaders.set('x-user-email', (payload.email as string) || '');
     requestHeaders.set('x-user-tier', (payload.tier as string) || 'FREE');
 
+    const isAdmin = (payload.isAdmin as boolean) ?? false;
+    requestHeaders.set('x-user-is-admin', String(isAdmin));
+
+    // Admin route protection (layer 2: role check after JWT verification)
+    if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
+      const emergencyEmails = (process.env.EMERGENCY_ADMIN_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
+      const userEmail = payload.email as string;
+      const isEmergencyAdmin = emergencyEmails.includes(userEmail);
+
+      if (!isAdmin && !isEmergencyAdmin) {
+        if (pathname.startsWith('/api/admin')) {
+          return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 403 });
+        }
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
+    }
+
     return NextResponse.next({
       request: { headers: requestHeaders },
     });
   } catch {
     // Token expired or invalid
+    if (pathname.startsWith('/api/')) {
+      const response = NextResponse.json(
+        { error: '인증이 만료되었습니다. 다시 로그인해주세요.', code: 'SESSION_EXPIRED' },
+        { status: 401 }
+      );
+      response.cookies.set('token', '', { maxAge: 0, path: '/' });
+      return response;
+    }
     const response = NextResponse.redirect(new URL('/login', request.url));
     response.cookies.set('token', '', { maxAge: 0, path: '/' });
     return response;

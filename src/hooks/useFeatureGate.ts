@@ -9,12 +9,23 @@ interface FeatureGateData {
     questionsPerSession: number;
     customCourse: boolean;
     advancedAnalytics: boolean;
+    /** @deprecated maxTargetPositions 사용 */
+    targetPositionInterview: boolean;
+    maxTargetPositions: number;
+    aiJobParsing: boolean;
+    monthlyJobParses: number | null;
+    generateQuestions: boolean;
+    techKnowledge: readonly string[] | 'all';
+    companyStyles: readonly string[] | 'all';
+    adaptiveDifficulty: boolean;
+    crossTechQuestions: boolean;
   };
   usage: {
     sessionsThisMonth: number | null;
     remainingSessions: number | null;
     monthlyQuestions: number;
     monthlyCostUsd: number;
+    currentPositionCount: number;
   };
 }
 
@@ -24,11 +35,45 @@ export function useFeatureGate() {
 
   useEffect(() => {
     fetch('/api/usage')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`Usage fetch failed (${res.status})`);
+        return res.json();
+      })
       .then(d => setData(d))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  return { data, loading };
+  /**
+   * Check if user can use a specific tech knowledge base
+   */
+  const canUseTechKnowledge = (techId: string): boolean => {
+    if (!data) return false;
+    const allowed = data.limits.techKnowledge;
+    return allowed === 'all' || allowed.includes(techId);
+  };
+
+  /**
+   * Check if user can use a specific company style
+   */
+  const canUseCompanyStyle = (styleId: string): boolean => {
+    if (!data) return false;
+    const allowed = data.limits.companyStyles;
+    return allowed === 'all' || allowed.includes(styleId);
+  };
+
+  /**
+   * Check if user can use adaptive difficulty
+   */
+  const canUseAdaptiveDifficulty = (): boolean => {
+    return data?.limits.adaptiveDifficulty ?? false;
+  };
+
+  return {
+    data,
+    loading,
+    canUseTechKnowledge,
+    canUseCompanyStyle,
+    canUseAdaptiveDifficulty,
+  };
 }
