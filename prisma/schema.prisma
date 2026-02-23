@@ -514,6 +514,7 @@ model ResumeEdit {
   version          Int             @default(1)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+  appliedAt        DateTime?
 
   @@index([profileId])
   @@index([profileId, targetPositionId])
