@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {
@@ -77,11 +78,20 @@ model User {
   updatedAt   DateTime  @updatedAt
   lastLoginAt DateTime?
   isActive    Boolean   @default(true)
+  isAdmin     Boolean   @default(false)
+  signupSource         String?   // UTM 파라미터 / 유입 경로
+  referralCode         String?   @unique // 레퍼럴 코드
+  referredByUserId     String?   // 추천인
+  onboardingCompletedAt DateTime? // 온보딩 완료 시점
+  aiDataConsent        Boolean   @default(false) // AI 데이터 활용 동의
+  jobFunction          String    @default("developer") // 직무 구분 (developer, pm, designer, etc.)
   deletedAt   DateTime?
 
   @@unique([oauthProvider, oauthProviderId])
-  @@index([email])
+  @@index([jobFunction])
   @@index([subscriptionTier])
+  @@index([lastLoginAt])
+  @@index([createdAt])
 }
 
 // ─── 사용자 기본 프로필 (하나만 존재) ───
@@ -107,6 +117,7 @@ model UserProfile {
   skills          UserSkill[] // 기술 스택 (숙련도 포함)
   experiences     WorkExperience[] // 경력 사항
   targetPositions TargetPosition[] // 지원 회사/포지션
+  resumeEdits     ResumeEdit[] // 이력서 첨삭 결과
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -141,22 +152,57 @@ model WorkExperience {
   achievements String[] // 주요 성과
   orderIndex   Int // 표시 순서
   createdAt    DateTime    @default(now())
+
+  @@index([profileId])
 }
 
 // ─── 지원 회사/포지션 (여러 개 관리 가능) ───
 model TargetPosition {
-  id             String             @id @default(cuid())
-  profileId      String
-  profile        UserProfile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  company        String // 지원 회사명
-  position       String // 포지션 (e.g., "시니어 백엔드 개발자")
-  jobDescription String? // JD (Job Description) 텍스트
-  requirements   String[] // 주요 요구사항
-  notes          String? // 메모
-  isActive       Boolean            @default(true) // 활성 여부
-  sessions       InterviewSession[] // 이 포지션으로 진행한 면접들
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id                      String      @id @default(cuid())
+  profileId               String
+  profile                 UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company                 String // 지원 회사명
+  position                String // 포지션 (e.g., "시니어 백엔드 개발자")
+  jobDescription          String? // JD (Job Description) 텍스트
+  requirements            String[] // 주요 요구사항
+  preferredQualifications String[]    @default([]) // 우대사항
+  requiredExperience      String? // 필요 경력 (예: "3년 이상")
+  notes                   String? // 메모
+  isActive                Boolean     @default(true) // 활성 여부
+
+  // Extended fields for job posting details
+  salaryRange    String? // 연봉 범위 (e.g., "5,000~7,000만원", "협의")
+  location       String? // 근무 지역 (e.g., "서울 강남구", "판교")
+  employmentType String? // 고용 형태 ("정규직", "계약직", "인턴")
+  deadline       String? // 지원 마감일 (e.g., "2026-03-15", "상시채용")
+  benefits       String[]  @default([]) // 복리후생 (["스톡옵션", "유연근무", "식대 지원"])
+  companySize    String? // 회사 규모 (e.g., "스타트업 (10-50명)", "대기업")
+  sourceUrl      String? // 파싱 원본 URL
+  sourceSite     String? // 출처 사이트 ("saramin", "wanted", etc.)
+  lastFetched    DateTime? // 마지막 파싱 시간
+  techStack      String[]  @default([]) // 기술 스택
+
+  sessions           InterviewSession[] // 이 포지션으로 진행한 면접들
+  generatedQuestions GeneratedQuestion[] // AI 생성 예상 질문
+  resumeEdits        ResumeEdit[] // 이력서 첨삭 결과
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([profileId])
+}
+
+// ─── AI 생성 예상 면접 질문 ───
+model GeneratedQuestion {
+  id               String         @id @default(cuid())
+  targetPositionId String
+  targetPosition   TargetPosition @relation(fields: [targetPositionId], references: [id], onDelete: Cascade)
+  content          String // 질문 내용
+  category         String // 질문 카테고리 (기술심화, 프로젝트경험, 시스템설계, 인성문화핏, 직무적합성)
+  reasoning        String? // AI가 이 질문을 생성한 이유
+  orderIndex       Int // 표시 순서
+  createdAt        DateTime       @default(now())
+
+  @@index([targetPositionId])
 }
 
 // ─── 면접 세션 ───
@@ -169,11 +215,18 @@ model InterviewSession {
   topics           String[] // 선택한 주제들
   difficulty       String // junior / mid / senior
   evaluationMode   String // immediate / after_complete
+  interviewType    String   @default("technical") // "technical" | "behavioral" | "mixed"
+  companyStyle     String? // Company interview style ID (e.g., "naver", "coupang", "startup")
+  techKnowledgeEnabled Boolean @default(false) // Whether tech knowledge base was used for this session
+  jobFunction      String  @default("developer") // 직무 구분 (developer, pm, designer, etc.)
   status           String // in_progress / completed / abandoned
   questionCount    Int             @default(0) // 총 질문 수 (캐싱 용도)
   endReason        String? // user_ended / all_topics_covered / error / timeout
   totalScore       Float? // 세션 평균 점수
   summary          String? // AI 생성 세션 요약
+  userRating           Int?      // 세션 종료 후 만족도 (1-5)
+  mostHelpfulQuestionId String?  // 가장 도움된 질문 ID
+  sessionDurationSec   Int?      // 총 세션 시간 (초)
   startedAt        DateTime        @default(now())
   completedAt      DateTime?
   deletedAt        DateTime? // Soft Delete
@@ -181,6 +234,7 @@ model InterviewSession {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  @@index([jobFunction])
   @@index([startedAt])
   @@index([targetPositionId, startedAt])
   @@index([userId, startedAt])
@@ -198,6 +252,7 @@ model Question {
   category   String // 주제 카테고리
   difficulty String // 난이도
   status     String           @default("pending") // pending / answered / skipped
+  isFollowUp Boolean          @default(false) // 꼬리질문 여부
   userAnswer String? // 사용자 답변
   evaluation Evaluation?
   followUps  FollowUp[] // 꼬리질문들
@@ -206,6 +261,7 @@ model Question {
 
   @@unique([sessionId, orderIndex])
   @@index([sessionId, status])
+  @@index([sessionId, isFollowUp])
 }
 
 // ─── 평가 ───
@@ -285,7 +341,7 @@ model AIUsageLog {
   durationMs   Int? // 응답 소요 시간 (ms)
   success      Boolean @default(true) // 성공 여부
   errorMessage String? // 에러 발생 시 메시지
-  cost         Float?  // 예상 비용 (USD)
+  cost         Float? // 예상 비용 (USD)
   tier         String? // 사용자 구독 등급
 
   createdAt DateTime @default(now())
@@ -299,19 +355,19 @@ model AIUsageLog {
 
 // ─── 구독 (결제) ───
 model Subscription {
-  id         String @id @default(cuid())
-  userId     String @unique
-  user       User   @relation(fields: [userId], references: [id])
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
 
-  provider   PaymentProvider    @default(STRIPE)
+  provider   PaymentProvider @default(STRIPE)
   externalId String // Stripe subscription ID
   customerId String // Stripe customer ID
 
   status       SubscriptionStatus @default(TRIALING)
   tier         SubscriptionTier
-  billingCycle BillingCycle        @default(MONTHLY)
+  billingCycle BillingCycle       @default(MONTHLY)
 
-  amount   Int    // 원 단위 (KRW)
+  amount   Int // 원 단위 (KRW)
   currency String @default("KRW")
 
   currentPeriodStart DateTime
@@ -351,20 +407,22 @@ model Payment {
   createdAt DateTime @default(now())
 
   @@index([subscriptionId])
+  @@index([externalId])
+  @@index([status, createdAt])
   @@index([createdAt])
 }
 
 // ─── Webhook 이벤트 (멱등성) ───
 model WebhookEvent {
-  id         String          @id @default(cuid())
-  provider   PaymentProvider
-  eventType  String
-  externalId String          @unique // 이벤트 ID (멱등성 보장)
-  payload    Json
-  processed  Boolean         @default(false)
+  id          String          @id @default(cuid())
+  provider    PaymentProvider
+  eventType   String
+  externalId  String          @unique // 이벤트 ID (멱등성 보장)
+  payload     Json
+  processed   Boolean         @default(false)
   processedAt DateTime?
-  error      String?
-  retryCount Int             @default(0)
+  error       String?
+  retryCount  Int             @default(0)
 
   createdAt DateTime @default(now())
 
@@ -375,11 +433,11 @@ model WebhookEvent {
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String
-  action     String   // e.g., "subscription.created", "payment.refunded", "user.login"
-  resource   String   // e.g., "subscription", "payment", "user"
-  resourceId String?  // ID of the affected resource
-  details    Json?    // Additional context
-  ip         String?  // Request IP
+  action     String // e.g., "subscription.created", "payment.refunded", "user.login"
+  resource   String // e.g., "subscription", "payment", "user"
+  resourceId String? // ID of the affected resource
+  details    Json? // Additional context
+  ip         String? // Request IP
   createdAt  DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -389,17 +447,75 @@ model AuditLog {
 
 // ─── 베타 피드백 ───
 model BetaFeedback {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category  String   // "bug", "feature", "ux", "performance", "general"
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String // "bug", "feature", "ux", "performance", "general"
   content   String
-  rating    Int?     // 1-5
-  page      String?  // URL where feedback was given
+  rating    Int? // 1-5
+  page      String? // URL where feedback was given
   userAgent String?
+
+  // 관리자 워크플로우
+  status     String? // "open" | "in_progress" | "resolved" | "dismissed"
+  adminNote  String? // 관리자 메모
+  resolvedAt DateTime? // 해결 시간
+  resolvedBy String? // 해결한 관리자 ID (no FK, audit trail only)
+
   createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([category])
   @@index([createdAt])
+  @@index([status])
+}
+
+// ─── 공지사항 ───
+enum AnnouncementTarget {
+  ALL
+  FREE
+  PRO
+}
+
+enum AnnouncementDisplayType {
+  BANNER
+  POPUP
+}
+
+model Announcement {
+  id          String                  @id @default(cuid())
+  title       String
+  content     String
+  target      AnnouncementTarget      @default(ALL)
+  displayType AnnouncementDisplayType @default(BANNER)
+  startsAt    DateTime                @default(now())
+  endsAt      DateTime? // null = 무기한
+  createdBy   String // 생성한 관리자 ID
+  deletedAt   DateTime? // Soft delete
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([deletedAt, startsAt, endsAt])
+  @@index([target])
+}
+
+// ─── 이력서 편집/코칭 결과 ───
+model ResumeEdit {
+  id               String          @id @default(cuid())
+  profileId        String
+  profile          UserProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetPositionId String?
+  targetPosition   TargetPosition? @relation(fields: [targetPositionId], references: [id], onDelete: SetNull)
+  mode             String // "general" | "targeted"
+  sections         Json // SectionFeedback[]
+  overallScore     Int? // 1-10
+  overallFeedback  String?
+  keywordMatch     Json? // targeted 모드: { matched[], missing[], coverage, suggestions[] }
+  version          Int             @default(1)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([profileId])
+  @@index([profileId, targetPositionId])
+  @@index([targetPositionId])
 }

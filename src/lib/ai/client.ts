@@ -12,7 +12,7 @@ import { healthMonitor } from './health-monitor';
 function containsVisionContent(messages: AIMessage[]): boolean {
   return messages.some(m =>
     Array.isArray(m.content) &&
-    (m.content as AIContentBlock[]).some(b => b.type === 'image_url')
+    (m.content as AIContentBlock[]).some(b => b.type === 'image_url' || b.type === 'document')
   );
 }
 
@@ -35,7 +35,7 @@ function getOtherProvider(current: AIProvider, primary: AIProvider, fallback: AI
 
 export function createAIClient(context?: {
   sessionId?: string;
-  endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse';
+  endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit';
 }): AIClient {
   const { primary, fallback } = getProviders();
 
@@ -139,7 +139,7 @@ function trackLogPromise(promise: Promise<void>): void {
 
 function wrapWithLogging(
   client: AIClient,
-  context: { sessionId?: string; endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' }
+  context: { sessionId?: string; endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit' }
 ): AIClient {
   return {
     async *streamChat(options: AIStreamOptions): AsyncIterable<string> {

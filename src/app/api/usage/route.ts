@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { prisma } from '@/lib/db/prisma';
-import { TIER_LIMITS, checkSessionLimit } from '@/lib/feature-gate';
+import { TIER_LIMITS, checkSessionLimit, checkResumeEditLimit } from '@/lib/feature-gate';
 import type { TierKey } from '@/lib/feature-gate';
 
 export async function GET(request: NextRequest) {
@@ -26,6 +26,20 @@ export async function GET(request: NextRequest) {
       _count: true,
     });
 
+    // Get user's profile to query position count
+    const profile = await prisma.userProfile.findFirst({
+      where: { userId: auth.user.userId },
+      select: { id: true },
+    });
+
+    const positionCount = profile
+      ? await prisma.targetPosition.count({
+          where: { profileId: profile.id, isActive: true },
+        })
+      : 0;
+
+    const resumeEditQuota = await checkResumeEditLimit(auth.user.userId, tier);
+
     const sessionsThisMonth = limits.monthlySessions !== null && quota.remaining !== null
       ? limits.monthlySessions - quota.remaining
       : null;
@@ -37,12 +51,24 @@ export async function GET(request: NextRequest) {
         questionsPerSession: limits.questionsPerSession,
         customCourse: limits.customCourse,
         advancedAnalytics: limits.advancedAnalytics,
+        targetPositionInterview: limits.targetPositionInterview,
+        maxTargetPositions: limits.maxTargetPositions,
+        aiJobParsing: limits.aiJobParsing,
+        monthlyJobParses: limits.monthlyJobParses,
+        generateQuestions: limits.generateQuestions,
+        techKnowledge: limits.techKnowledge,
+        companyStyles: limits.companyStyles,
+        adaptiveDifficulty: limits.adaptiveDifficulty,
+        crossTechQuestions: limits.crossTechQuestions,
+        monthlyResumeEdits: limits.monthlyResumeEdits,
       },
       usage: {
         sessionsThisMonth,
         remainingSessions: quota.remaining,
         monthlyQuestions: monthlyCost._count,
         monthlyCostUsd: monthlyCost._sum.cost ?? 0,
+        currentPositionCount: positionCount,
+        remainingResumeEdits: resumeEditQuota.remaining,
       },
     });
   } catch (error) {

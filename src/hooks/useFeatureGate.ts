@@ -19,6 +19,7 @@ interface FeatureGateData {
     companyStyles: readonly string[] | 'all';
     adaptiveDifficulty: boolean;
     crossTechQuestions: boolean;
+    monthlyResumeEdits: number | null;
   };
   usage: {
     sessionsThisMonth: number | null;
@@ -26,6 +27,7 @@ interface FeatureGateData {
     monthlyQuestions: number;
     monthlyCostUsd: number;
     currentPositionCount: number;
+    remainingResumeEdits: number | null;
   };
 }
 

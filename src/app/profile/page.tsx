@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 import { ProfileSection } from '@/components/profile/ProfileSection';
 import { SkillSelector } from '@/components/profile/SkillSelector';
 import { ExperienceEditor } from '@/components/profile/ExperienceEditor';
+import { ResumeParseModal } from '@/components/profile/ResumeParseModal';
+import { ResumeEditModal } from '@/components/resume/ResumeEditModal';
+import { ResumeEditHistory } from '@/components/resume/ResumeEditHistory';
 
 interface Profile {
   id: string;
@@ -69,6 +72,17 @@ export default function ProfilePage() {
   // Strengths/weaknesses inline add
   const [strengthInput, setStrengthInput] = useState('');
   const [weaknessInput, setWeaknessInput] = useState('');
+
+  // PDF resume upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isParsingResume, setIsParsingResume] = useState(false);
+  const [parsedResume, setParsedResume] = useState<{
+    selfIntroduction: string;
+    experiences: Array<{ company: string; role: string; startDate: string; endDate: string | null; description: string; techStack: string[]; achievements: string[] }>;
+    skills: Array<{ name: string; category: string; proficiency: number; yearsUsed: number | null }>;
+  } | null>(null);
+  const [showParseModal, setShowParseModal] = useState(false);
+  const [showResumeEditModal, setShowResumeEditModal] = useState(false);
 
   // Saving states
   const [savingSection, setSavingSection] = useState<string | null>(null);
@@ -240,6 +254,72 @@ export default function ProfilePage() {
     }
   };
 
+  // PDF resume upload handler
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+
+    // Client-side validation
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      showError('PDF 파일만 업로드 가능합니다.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showError('파일 크기는 10MB 이하만 가능합니다.');
+      return;
+    }
+
+    setIsParsingResume(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/profile/resume-parse', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.error || '이력서 분석에 실패했습니다.');
+        return;
+      }
+
+      setParsedResume(data.parsed);
+      setShowParseModal(true);
+    } catch {
+      showError('이력서 분석에 실패했습니다. 수동으로 입력해주세요.');
+    } finally {
+      setIsParsingResume(false);
+    }
+  };
+
+  // Batch save handler (from modal)
+  const handleResumeParseSave = async (data: {
+    mode: 'merge' | 'replace';
+    selfIntroduction?: string;
+    experiences?: Array<{ company: string; role: string; startDate: string; endDate: string | null; description: string; techStack: string[]; achievements: string[] }>;
+    skills?: Array<{ name: string; category: string; proficiency: number; yearsUsed: number | null }>;
+  }) => {
+    const res = await fetch('/api/profile/batch-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      showError(errorData.error || '저장에 실패했습니다.');
+      throw new Error('Save failed');
+    }
+
+    await fetchProfile();
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -255,8 +335,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8 px-4">
-      {/* Narrow container: title + error + basic info */}
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="space-y-6">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">프로필 관리</h1>
 
         {/* Global Error */}
@@ -415,17 +494,47 @@ export default function ProfilePage() {
           )}
         </ProfileSection>
 
-      </div>
+        {/* PDF Resume Upload */}
+        <ProfileSection title="이력서 자동 입력">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 flex-1">
+              PDF 이력서를 업로드하면 경력, 기술, 자기소개를 자동으로 추출합니다.
+            </p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isParsingResume}
+              className={cn(
+                'shrink-0 px-4 py-2 rounded-lg text-sm font-medium',
+                'bg-violet-600 text-white hover:bg-violet-700',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            >
+              {isParsingResume ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  AI 분석 중...
+                </span>
+              ) : (
+                'PDF 업로드'
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+          </div>
+        </ProfileSection>
 
-      {/* Wide container: skill section only */}
-      <div className="mx-auto max-w-5xl mt-6">
+        {/* Skills */}
         <ProfileSection title="기술 스택">
           <SkillSelector skills={profile.skills} onRefetch={fetchProfile} />
         </ProfileSection>
-      </div>
-
-      {/* Narrow container: remaining sections */}
-      <div className="mx-auto max-w-3xl space-y-6 mt-6">
         {/* Experiences */}
         <ProfileSection title="경력 사항">
           <ExperienceEditor experiences={profile.experiences} onRefetch={fetchProfile} />
@@ -629,6 +738,55 @@ export default function ProfilePage() {
             <p className="text-sm text-zinc-400">이력서가 없습니다. 편집 버튼을 눌러 추가하세요.</p>
           )}
         </ProfileSection>
+
+        {/* AI Resume Coaching */}
+        <ProfileSection title="AI 이력서 코칭">
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 flex-1">
+                AI가 이력서를 분석하고 섹션별 개선안을 제시합니다.
+              </p>
+              <button
+                onClick={() => setShowResumeEditModal(true)}
+                disabled={!(profile.experiences.length > 0 || profile.selfIntroduction || profile.resumeText)}
+                className={cn(
+                  'shrink-0 px-4 py-2 rounded-lg text-sm font-medium',
+                  'bg-emerald-600 text-white hover:bg-emerald-700',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+              >
+                코칭 받기
+              </button>
+            </div>
+            {!(profile.experiences.length > 0 || profile.selfIntroduction || profile.resumeText) && (
+              <p className="text-xs text-amber-400">
+                코칭을 받으려면 경력사항, 자기소개, 또는 이력서 중 하나 이상을 먼저 입력해주세요.
+              </p>
+            )}
+            <ResumeEditHistory />
+          </div>
+        </ProfileSection>
+
+        {showResumeEditModal && (
+          <ResumeEditModal
+            isOpen={showResumeEditModal}
+            onClose={() => setShowResumeEditModal(false)}
+            onApplied={() => fetchProfile()}
+          />
+        )}
+
+        {/* Resume Parse Modal */}
+        {parsedResume && (
+          <ResumeParseModal
+            isOpen={showParseModal}
+            onClose={() => {
+              setShowParseModal(false);
+              setParsedResume(null);
+            }}
+            parsed={parsedResume}
+            onSave={handleResumeParseSave}
+          />
+        )}
       </div>
     </div>
   );
