@@ -190,6 +190,8 @@ function InterviewSetupPageContent() {
     onCancel: () => void;
   } | null>(null);
   const [showFullOptions, setShowFullOptions] = useState(false);
+  const [showEndSessionModal, setShowEndSessionModal] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
 
   const isPro = featureData?.tier === 'PRO';
   const isFirstTimeUser = stats ? stats.totalSessions === 0 : false;
@@ -281,6 +283,7 @@ function InterviewSetupPageContent() {
         const data = await res.json();
         if (data.sessions && data.sessions.length > 0) {
           setActiveSessionId(data.sessions[0].id);
+          setExistingSessionInfo(data.sessions[0]);
         }
       }
     } catch {}
@@ -427,7 +430,7 @@ function InterviewSetupPageContent() {
 
   async function createSession(topics: string[], diff: string, positionId?: string, abandonExisting = false) {
     // Check for unapplied resume edit before starting targeted interview
-    if (positionId && !abandonExisting) {
+    if (positionId) {
       const shouldProceed = await checkResumeEditBeforeInterview(positionId);
       if (!shouldProceed) return;
     }
@@ -494,6 +497,56 @@ function InterviewSetupPageContent() {
         pendingSessionParams.positionId,
         true
       );
+    }
+  }
+
+  async function handleEndWithEvaluation() {
+    if (!activeSessionId) return;
+    setIsEndingSession(true);
+    try {
+      const putRes = await fetch('/api/interview', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeSessionId, status: 'completed' }),
+      });
+      if (!putRes.ok) throw new Error('세션 종료 실패');
+
+      await fetch('/api/interview/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: activeSessionId }),
+      });
+
+      router.push(`/history/${activeSessionId}`);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '면접 종료에 실패했습니다.', 'error');
+      setIsEndingSession(false);
+    } finally {
+      setShowEndSessionModal(false);
+      setActiveSessionId(null);
+      setExistingSessionInfo(null);
+    }
+  }
+
+  async function handleEndWithoutEvaluation() {
+    if (!activeSessionId) return;
+    setIsEndingSession(true);
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeSessionId, status: 'abandoned' }),
+      });
+      if (!res.ok) throw new Error('면접 종료 실패');
+
+      toast('면접이 종료되었습니다.', 'success');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '면접 종료에 실패했습니다.', 'error');
+    } finally {
+      setShowEndSessionModal(false);
+      setIsEndingSession(false);
+      setActiveSessionId(null);
+      setExistingSessionInfo(null);
     }
   }
 
@@ -615,18 +668,25 @@ function InterviewSetupPageContent() {
           </div>
         )}
 
-        {activeSessionId && (
-          <div className="mb-8 bg-blue-950/50 border border-blue-800 rounded-lg p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-blue-400 animate-pulse" />
-                <p className="text-white font-medium">진행중인 면접이 있습니다</p>
-              </div>
+        {activeSessionId && existingSessionInfo && (
+          <div className="mb-4 p-3 bg-blue-950/50 border border-blue-800/50 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+              <span className="text-sm text-blue-300 font-medium">진행 중인 면접</span>
+              <span className="text-sm text-zinc-400">{existingSessionInfo.topics?.join(', ') || ''}</span>
+            </div>
+            <div className="flex gap-2">
               <button
-                onClick={() => router.push(`/interview/${activeSessionId}`)}
-                className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-500 transition-colors"
+                onClick={handleResumeExisting}
+                className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 이어하기
+              </button>
+              <button
+                onClick={() => setShowEndSessionModal(true)}
+                className="px-3 py-1.5 text-xs font-medium bg-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-600 transition-colors"
+              >
+                종료하기
               </button>
             </div>
           </div>
@@ -1201,6 +1261,15 @@ function InterviewSetupPageContent() {
             >
               새로 시작
             </button>
+            <button
+              onClick={() => {
+                setShowExistingSessionModal(false);
+                setTimeout(() => setShowEndSessionModal(true), 150);
+              }}
+              className="flex-1 px-4 py-2.5 bg-red-900/50 text-red-300 rounded-lg font-medium hover:bg-red-900/70 transition-colors"
+            >
+              면접 종료
+            </button>
           </div>
         </div>
       </Modal>
@@ -1239,6 +1308,39 @@ function InterviewSetupPageContent() {
           </div>
         </Modal>
       )}
+
+      <Modal
+        isOpen={showEndSessionModal}
+        onClose={() => !isEndingSession && setShowEndSessionModal(false)}
+        title="면접을 종료하시겠습니까?"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-400">
+            진행 중인 면접을 종료합니다. 종료 방식을 선택해주세요.
+          </p>
+          {isEndingSession ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="w-5 h-5 border-2 border-zinc-600 border-t-emerald-500 rounded-full animate-spin mr-2" />
+              <span className="text-sm text-zinc-400">처리 중...</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleEndWithEvaluation}
+                className="w-full px-4 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
+              >
+                평가 받고 종료
+              </button>
+              <button
+                onClick={handleEndWithoutEvaluation}
+                className="w-full px-4 py-2.5 bg-zinc-700 text-zinc-100 rounded-lg font-medium hover:bg-zinc-600 transition-colors"
+              >
+                그냥 종료
+              </button>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       <JobParsingModal
         isOpen={showParsingModal}
