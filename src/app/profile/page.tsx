@@ -771,7 +771,6 @@ export default function ProfilePage() {
           <ResumeEditModal
             isOpen={showResumeEditModal}
             onClose={() => setShowResumeEditModal(false)}
-            onApplied={() => fetchProfile()}
           />
         )}
 

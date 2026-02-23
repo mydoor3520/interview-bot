@@ -50,16 +50,12 @@ interface ResumeEditModalProps {
   onClose: () => void;
   targetPositionId?: string;
   existingEdit?: ResumeEditData;
-  onApplied?: () => void;
 }
 
-export function ResumeEditModal({ isOpen, onClose, targetPositionId, existingEdit, onApplied }: ResumeEditModalProps) {
+export function ResumeEditModal({ isOpen, onClose, targetPositionId, existingEdit }: ResumeEditModalProps) {
   const [data, setData] = useState<ResumeEditData | null>(existingEdit || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
-  const [applying, setApplying] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ appliedSections: string[]; warnings: string[] } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
   const isCreateMode = !existingEdit;
@@ -89,7 +85,6 @@ export function ResumeEditModal({ isOpen, onClose, targetPositionId, existingEdi
   async function generateEdit() {
     setLoading(true);
     setError(null);
-    setApplyResult(null);
     try {
       const res = await fetch('/api/resume-edit', {
         method: 'POST',
@@ -116,51 +111,13 @@ export function ResumeEditModal({ isOpen, onClose, targetPositionId, existingEdi
     }
   }
 
-  async function handleApply() {
-    if (!data || selectedSections.size === 0) return;
-    setApplying(true);
-    try {
-      const res = await fetch(`/api/resume-edit/${data.id}/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sections: Array.from(selectedSections) }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: '서버 오류가 발생했습니다.' }));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-
-      const result = await res.json();
-      setApplyResult(result);
-      setSelectedSections(new Set());
-      onApplied?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '적용 중 오류가 발생했습니다.');
-    } finally {
-      setApplying(false);
-    }
-  }
-
   function handleRegenerate() {
     setData(null);
-    setSelectedSections(new Set());
-    setApplyResult(null);
     generateEdit();
   }
 
   function toggleSection(section: string) {
     setExpandedSections(prev => {
-      const next = new Set(prev);
-      if (next.has(section)) next.delete(section);
-      else next.add(section);
-      return next;
-    });
-  }
-
-  function toggleSelectSection(section: string) {
-    if (section === 'skills') return; // skills cannot be applied
-    setSelectedSections(prev => {
       const next = new Set(prev);
       if (next.has(section)) next.delete(section);
       else next.add(section);
@@ -249,22 +206,6 @@ export function ResumeEditModal({ isOpen, onClose, targetPositionId, existingEdi
             </div>
           )}
 
-          {/* Apply result */}
-          {applyResult && (
-            <div className="rounded-lg bg-emerald-900/20 border border-emerald-800/50 p-4">
-              <p className="text-emerald-400 text-sm font-medium">
-                {applyResult.appliedSections.length}개 섹션이 프로필에 적용되었습니다.
-              </p>
-              {applyResult.warnings.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {applyResult.warnings.map((w, i) => (
-                    <li key={i} className="text-yellow-400 text-xs">- {w}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
           {/* Main content */}
           {data && !loading && (
             <>
@@ -344,18 +285,6 @@ export function ResumeEditModal({ isOpen, onClose, targetPositionId, existingEdi
                       className="w-full flex items-center justify-between px-4 py-3 bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        {section.section !== 'skills' && (
-                          <input
-                            type="checkbox"
-                            checked={selectedSections.has(section.section)}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              toggleSelectSection(section.section);
-                            }}
-                            onClick={e => e.stopPropagation()}
-                            className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500/30"
-                          />
-                        )}
                         <span className="text-sm font-medium text-zinc-200">{section.sectionLabel}</span>
                         <span className={`text-sm font-bold ${getScoreColor(section.score)}`}>
                           {section.score}/10
@@ -513,15 +442,6 @@ export function ResumeEditModal({ isOpen, onClose, targetPositionId, existingEdi
                 닫기
               </button>
             </div>
-            {!existingEdit && (
-              <button
-                onClick={handleApply}
-                disabled={selectedSections.size === 0 || applying}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {applying ? '적용 중...' : `선택 항목 적용 (${selectedSections.size})`}
-              </button>
-            )}
           </div>
         )}
       </div>

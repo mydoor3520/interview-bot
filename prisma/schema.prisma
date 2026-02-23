@@ -230,6 +230,8 @@ model InterviewSession {
   startedAt        DateTime        @default(now())
   completedAt      DateTime?
   deletedAt        DateTime? // Soft Delete
+  resumeEditId     String?
+  resumeEdit       ResumeEdit? @relation(fields: [resumeEditId], references: [id], onDelete: SetNull)
   questions        Question[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -240,6 +242,7 @@ model InterviewSession {
   @@index([userId, startedAt])
   @@index([userId, createdAt])
   @@index([userId, status, completedAt])
+  @@index([resumeEditId])
 }
 
 // ─── 면접 질문 ───
@@ -514,7 +517,7 @@ model ResumeEdit {
   version          Int             @default(1)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
-  appliedAt        DateTime?
+  interviewSessions InterviewSession[]
 
   @@index([profileId])
   @@index([profileId, targetPositionId])

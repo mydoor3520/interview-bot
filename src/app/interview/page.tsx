@@ -382,12 +382,12 @@ function InterviewSetupPageContent() {
     ),
   })).filter((group) => group.topics.length > 0);
 
-  async function checkResumeEditBeforeInterview(positionId: string): Promise<boolean> {
+  async function selectResumeForInterview(positionId: string): Promise<string | null | 'cancel'> {
     try {
       const res = await fetch(`/api/resume-edit?targetPositionId=${positionId}&latest=true`);
-      if (!res.ok) return true;
+      if (!res.ok) return null;
       const { edit } = await res.json();
-      if (!edit) return true;
+      if (!edit) return null;
 
       const position = positions.find(p => p.id === positionId);
       const positionName = position ? `${position.company} - ${position.position}` : '';
@@ -396,43 +396,32 @@ function InterviewSetupPageContent() {
         setResumeEditPrompt({
           edit,
           positionName,
-          onApply: async () => {
-            try {
-              const sectionNames = (edit.sections as any[])
-                .map((s: any) => s.section)
-                .filter((s: string) => s !== 'skills');
-              await fetch(`/api/resume-edit/${edit.id}/apply`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sections: sectionNames }),
-              });
-              toast('첨삭 이력서가 프로필에 적용되었습니다.', 'success');
-            } catch {
-              toast('이력서 적용 중 오류가 발생했습니다.', 'error');
-            }
+          onApply: () => {
             setResumeEditPrompt(null);
-            resolve(true);
+            resolve(edit.id);
           },
           onSkip: () => {
             setResumeEditPrompt(null);
-            resolve(true);
+            resolve(null);
           },
           onCancel: () => {
             setResumeEditPrompt(null);
-            resolve(false);
+            resolve('cancel');
           },
         });
       });
     } catch {
-      return true;
+      return null;
     }
   }
 
   async function createSession(topics: string[], diff: string, positionId?: string, abandonExisting = false) {
-    // Check for unapplied resume edit before starting targeted interview
+    let resumeEditId: string | undefined;
+
     if (positionId) {
-      const shouldProceed = await checkResumeEditBeforeInterview(positionId);
-      if (!shouldProceed) return;
+      const result = await selectResumeForInterview(positionId);
+      if (result === 'cancel') return;
+      resumeEditId = result ?? undefined;
     }
 
     // Check for existing in_progress session
@@ -464,6 +453,7 @@ function InterviewSetupPageContent() {
           interviewType,
           jobFunction,
           abandonExisting,
+          resumeEditId,
         }),
       });
 
@@ -1278,33 +1268,30 @@ function InterviewSetupPageContent() {
         <Modal
           isOpen={true}
           onClose={resumeEditPrompt.onCancel}
-          title="맞춤 이력서 코칭 결과가 있습니다"
+          title="면접용 이력서를 선택해주세요"
         >
           <div className="space-y-4">
             <div className="p-4 bg-emerald-900/20 border border-emerald-800/30 rounded-lg">
               <p className="text-sm text-zinc-300">
-                <span className="font-medium text-emerald-400">{resumeEditPrompt.positionName}</span>에 대한
-                이력서 코칭 결과(v{resumeEditPrompt.edit.version}, 점수: {resumeEditPrompt.edit.overallScore}/10)가
-                {resumeEditPrompt.edit.appliedAt ? ' 있습니다.' : ' 아직 프로필에 적용되지 않았습니다.'}
+                <span className="font-medium text-emerald-400">{resumeEditPrompt.positionName}</span>에 맞춰
+                작성된 이력서(v{resumeEditPrompt.edit.version}, 점수: {resumeEditPrompt.edit.overallScore}/10)가 있습니다.
               </p>
             </div>
             <p className="text-sm text-zinc-400">
-              {resumeEditPrompt.edit.appliedAt
-                ? '최신 코칭 결과를 다시 적용하거나, 현재 프로필 상태로 면접을 진행할 수 있습니다.'
-                : '적용 후 면접을 시작하면 개선된 이력서를 바탕으로 더 정확한 맞춤 면접이 진행됩니다.'}
+              맞춤 이력서를 사용하면 해당 포지션에 최적화된 면접이 진행됩니다.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={resumeEditPrompt.onApply}
                 className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
               >
-                {resumeEditPrompt.edit.appliedAt ? '다시 적용 후 면접 시작' : '적용 후 면접 시작'}
+                맞춤 이력서로 면접
               </button>
               <button
                 onClick={resumeEditPrompt.onSkip}
                 className="flex-1 px-4 py-2.5 bg-zinc-700 text-zinc-100 rounded-lg font-medium hover:bg-zinc-600 transition-colors"
               >
-                그냥 진행
+                기본 프로필로 면접
               </button>
             </div>
           </div>
