@@ -387,7 +387,7 @@ function InterviewSetupPageContent() {
       const res = await fetch(`/api/resume-edit?targetPositionId=${positionId}&latest=true`);
       if (!res.ok) return true;
       const { edit } = await res.json();
-      if (!edit || edit.appliedAt) return true;
+      if (!edit) return true;
 
       const position = positions.find(p => p.id === positionId);
       const positionName = position ? `${position.company} - ${position.position}` : '';
@@ -1285,18 +1285,20 @@ function InterviewSetupPageContent() {
               <p className="text-sm text-zinc-300">
                 <span className="font-medium text-emerald-400">{resumeEditPrompt.positionName}</span>에 대한
                 이력서 코칭 결과(v{resumeEditPrompt.edit.version}, 점수: {resumeEditPrompt.edit.overallScore}/10)가
-                아직 프로필에 적용되지 않았습니다.
+                {resumeEditPrompt.edit.appliedAt ? ' 있습니다.' : ' 아직 프로필에 적용되지 않았습니다.'}
               </p>
             </div>
             <p className="text-sm text-zinc-400">
-              적용 후 면접을 시작하면 개선된 이력서를 바탕으로 더 정확한 맞춤 면접이 진행됩니다.
+              {resumeEditPrompt.edit.appliedAt
+                ? '최신 코칭 결과를 다시 적용하거나, 현재 프로필 상태로 면접을 진행할 수 있습니다.'
+                : '적용 후 면접을 시작하면 개선된 이력서를 바탕으로 더 정확한 맞춤 면접이 진행됩니다.'}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={resumeEditPrompt.onApply}
                 className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
               >
-                적용 후 면접 시작
+                {resumeEditPrompt.edit.appliedAt ? '다시 적용 후 면접 시작' : '적용 후 면접 시작'}
               </button>
               <button
                 onClick={resumeEditPrompt.onSkip}
