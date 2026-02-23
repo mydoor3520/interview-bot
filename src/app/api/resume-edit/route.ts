@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         model: env.AI_MODEL,
         messages,
         temperature: 0.7,
-        maxTokens: 8192,
+        maxTokens: 16384,
       });
       aiResponseText = result.content;
     } catch (err) {
@@ -152,28 +152,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse JSON from AI response
+    // Parse JSON from AI response - strip markdown fences first
     let parsed: unknown;
+    let jsonText = aiResponseText.trim();
+    // Strip markdown code fences: ```json ... ``` or ``` ... ```
+    if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
     try {
-      parsed = JSON.parse(aiResponseText);
+      parsed = JSON.parse(jsonText);
     } catch {
-      // Try extracting from markdown code block
-      const match = aiResponseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (match) {
+      // Try extracting JSON object from mixed text
+      const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
         try {
-          parsed = JSON.parse(match[1]);
+          parsed = JSON.parse(jsonMatch[0]);
         } catch {
           // Fall through to retry
-        }
-      }
-      if (!parsed) {
-        const jsonMatch = aiResponseText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            parsed = JSON.parse(jsonMatch[0]);
-          } catch {
-            // Fall through to retry
-          }
         }
       }
     }
@@ -184,7 +179,11 @@ export async function POST(request: NextRequest) {
       const validation = resumeEditResponseSchema.safeParse(parsed);
       if (validation.success) {
         validatedData = validation.data;
+      } else {
+        console.warn('[ResumeEdit] Zod validation failed:', JSON.stringify(validation.error.issues, null, 2));
       }
+    } else {
+      console.warn('[ResumeEdit] JSON parse failed. Response preview:', aiResponseText.substring(0, 500));
     }
 
     // Retry once with lower temperature if parse/validation failed
@@ -195,22 +194,20 @@ export async function POST(request: NextRequest) {
           model: env.AI_MODEL,
           messages,
           temperature: 0.5,
-          maxTokens: 8192,
+          maxTokens: 16384,
         });
 
         let retryParsed: unknown;
+        let retryText = retryResult.content.trim();
+        if (retryText.startsWith('```')) {
+          retryText = retryText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+        }
         try {
-          retryParsed = JSON.parse(retryResult.content);
+          retryParsed = JSON.parse(retryText);
         } catch {
-          const match = retryResult.content.match(/```(?:json)?\s*([\s\S]*?)```/);
-          if (match) {
-            try { retryParsed = JSON.parse(match[1]); } catch {}
-          }
-          if (!retryParsed) {
-            const jsonMatch = retryResult.content.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              try { retryParsed = JSON.parse(jsonMatch[0]); } catch {}
-            }
+          const jsonMatch = retryText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try { retryParsed = JSON.parse(jsonMatch[0]); } catch {}
           }
         }
 
@@ -218,7 +215,11 @@ export async function POST(request: NextRequest) {
           const retryValidation = resumeEditResponseSchema.safeParse(retryParsed);
           if (retryValidation.success) {
             validatedData = retryValidation.data;
+          } else {
+            console.error('[ResumeEdit] Retry Zod validation failed:', JSON.stringify(retryValidation.error.issues, null, 2));
           }
+        } else {
+          console.error('[ResumeEdit] Retry JSON parse also failed. Response preview:', retryResult.content.substring(0, 500));
         }
       } catch (retryErr) {
         console.error('[ResumeEdit] Retry AI call failed:', retryErr);

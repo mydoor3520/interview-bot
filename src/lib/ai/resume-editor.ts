@@ -28,14 +28,14 @@ const sectionFeedbackSchema = z.object({
   improvedList: z.array(z.string()).optional(),
   reasoning: z.string(),
   keywords: z.array(z.string()).default([]),
-  score: z.number().min(1).max(10),
+  score: z.number().min(0).max(10),
   improvements: z.array(z.string()).default([]),
   careerItems: z.array(careerItemSchema).optional(),
 });
 
 export const resumeEditResponseSchema = z.object({
   sections: z.array(sectionFeedbackSchema).min(1),
-  overallScore: z.number().min(1).max(10),
+  overallScore: z.number().min(0).max(10),
   overallFeedback: z.string(),
   keywordMatch: z.object({
     matched: z.array(z.string()),
