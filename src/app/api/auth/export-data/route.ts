@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       where: { userId: auth.user.userId },
       include: {
         skills: true,
-        experiences: { orderBy: { orderIndex: 'asc' } },
+        experiences: { orderBy: [{ orderIndex: 'asc' }, { startDate: 'desc' }] },
         targetPositions: true,
       },
     });

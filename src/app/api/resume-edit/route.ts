@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       where: { userId: auth.user.userId },
       include: {
         skills: true,
-        experiences: { orderBy: { orderIndex: 'asc' } },
+        experiences: { orderBy: [{ orderIndex: 'asc' }, { startDate: 'desc' }] },
       },
     });
 
@@ -173,6 +173,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Filter unknown sections before Zod validation
+    const VALID_SECTIONS = ['selfIntro', 'career', 'strengths', 'weaknesses', 'resume', 'skills'];
+    if (parsed && typeof parsed === 'object' && parsed !== null && 'sections' in parsed && Array.isArray((parsed as Record<string, unknown>).sections)) {
+      (parsed as Record<string, unknown>).sections = ((parsed as Record<string, unknown>).sections as Array<Record<string, unknown>>)
+        .filter(s => typeof s.section === 'string' && VALID_SECTIONS.includes(s.section));
+    }
+
     // Validate with Zod
     let validatedData;
     if (parsed) {
@@ -212,6 +219,11 @@ export async function POST(request: NextRequest) {
         }
 
         if (retryParsed) {
+          // Filter unknown sections before Zod validation
+          if (typeof retryParsed === 'object' && retryParsed !== null && 'sections' in retryParsed && Array.isArray((retryParsed as Record<string, unknown>).sections)) {
+            (retryParsed as Record<string, unknown>).sections = ((retryParsed as Record<string, unknown>).sections as Array<Record<string, unknown>>)
+              .filter(s => typeof s.section === 'string' && VALID_SECTIONS.includes(s.section));
+          }
           const retryValidation = resumeEditResponseSchema.safeParse(retryParsed);
           if (retryValidation.success) {
             validatedData = retryValidation.data;
