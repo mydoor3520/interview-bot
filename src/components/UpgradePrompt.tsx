@@ -17,14 +17,13 @@ export function UpgradePrompt({ currentTier, sessionsUsed, sessionLimit }: Upgra
         월간 세션 한도에 도달했습니다
       </h3>
       <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
-        이번 달 {sessionLimit}개의 무료 세션을 모두 사용했습니다.
-        Pro 플랜으로 업그레이드하면 무제한으로 면접을 진행할 수 있습니다.
+        이번 달 {sessionLimit}개의 무료 세션을 모두 사용했습니다. 무료 베타 기간 중이며, 다음 달 1일에 초기화됩니다.
       </p>
       <Link
         href="/pricing"
         className="mt-3 inline-block rounded-lg bg-yellow-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-yellow-500 dark:bg-yellow-500 dark:hover:bg-yellow-400"
       >
-        플랜 업그레이드
+        더 알아보기
       </Link>
     </div>
   );

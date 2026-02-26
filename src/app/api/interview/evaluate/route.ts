@@ -4,6 +4,7 @@ import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { createAIClient } from '@/lib/ai/client';
 import { buildEvaluationPrompt } from '@/lib/ai/prompts';
 import { checkAIRateLimit } from '@/lib/ai/rate-limit';
+import { env } from '@/lib/env';
 import { z } from 'zod';
 
 const evaluateRequestSchema = z.object({
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
   if (questionId) {
     const question = await prisma.question.findUnique({
       where: { id: questionId },
-      include: { evaluation: true, session: { select: { userId: true } } },
+      include: { evaluation: true, session: true },
     });
 
     if (!question || question.session.userId !== auth.user.userId) {
@@ -62,13 +63,14 @@ export async function POST(request: NextRequest) {
       question.content,
       question.userAnswer,
       question.category,
-      question.difficulty
+      question.difficulty,
+      (question.session as any).interviewType as string | undefined
     );
 
     try {
       const { content } = await aiClient.chat({
         messages: evaluationMessages,
-        model: process.env.AI_MODEL || 'claude-sonnet-4',
+        model: env.AI_MODEL,
         temperature: 0.3,
       });
 
@@ -132,12 +134,13 @@ export async function POST(request: NextRequest) {
           question.content,
           question.userAnswer!,
           question.category,
-          question.difficulty
+          question.difficulty,
+          (session as any).interviewType as string | undefined
         );
 
         const { content } = await aiClient.chat({
           messages: evaluationMessages,
-          model: process.env.AI_MODEL || 'claude-sonnet-4',
+          model: env.AI_MODEL,
           temperature: 0.3,
         });
 

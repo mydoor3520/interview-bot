@@ -34,6 +34,7 @@ const mockProfile: ProfileContext = {
     position: '시니어 백엔드 개발자',
     jobDescription: 'Spring 기반 대규모 서비스 개발',
     requirements: ['Java 5년 이상', '대규모 트래픽 경험'],
+    preferredQualifications: ['K8s 경험', 'MSA 설계 경험'],
   },
 };
 
@@ -107,9 +108,10 @@ describe('buildInterviewSystemPrompt', () => {
     expect(result).toContain('피드백');
   });
 
-  it('excludes evaluation instructions for after_complete mode', () => {
+  it('always includes evaluation instructions regardless of evaluationMode', () => {
     const result = buildInterviewSystemPrompt(mockProfile, ['Java'], 'mid', 'after_complete');
-    expect(result).toContain('평가는 하지 말고');
+    // evaluationMode is always forced to 'immediate', so evaluation instructions are always present
+    expect(result).toContain('피드백');
   });
 
   it('instructs natural language only (no JSON)', () => {

@@ -1,15 +1,22 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
+import { getCompanyStyle } from '@/lib/interview-knowledge/company-styles';
+import { hasKnowledgeBase } from '@/lib/interview-knowledge';
+import { ShareableCard } from './ShareableCard';
 
 interface SessionSummaryProps {
-  totalScore: number;
+  totalScore: number | null;
   summary: string;
   topicScores: Record<string, number>;
   strengths: string[];
   weaknesses: string[];
   recommendations: string[];
   questionCount: number;
+  companyStyle?: string | null;
+  techKnowledgeEnabled?: boolean;
+  topics?: string[];
+  sessionId: string;
 }
 
 export function SessionSummary({
@@ -20,8 +27,20 @@ export function SessionSummary({
   weaknesses,
   recommendations,
   questionCount,
+  companyStyle,
+  techKnowledgeEnabled,
+  topics = [],
+  sessionId,
 }: SessionSummaryProps) {
   const router = useRouter();
+
+  // Get company style info if available
+  const companyStyleInfo = companyStyle ? getCompanyStyle(companyStyle) : null;
+
+  // Get active knowledge bases
+  const activeKnowledgeBases = techKnowledgeEnabled
+    ? topics.filter((topic) => hasKnowledgeBase(topic))
+    : [];
 
   const getScoreColor = (score: number) => {
     if (score <= 3) return 'text-red-600 dark:text-red-400';
@@ -43,15 +62,58 @@ export function SessionSummary({
         <h1 className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">면접 완료</h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-8">총 {questionCount}개의 질문에 답변하셨습니다.</p>
 
-        <div className={cn('rounded-lg p-6 mb-8', getScoreBgColor(totalScore))}>
-          <div className="text-center">
-            <div className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">종합 점수</div>
-            <div className={cn('text-6xl font-bold mb-2', getScoreColor(totalScore))}>
-              {totalScore.toFixed(1)}/10
+        {totalScore !== null && totalScore !== undefined ? (
+          <div className={cn('rounded-lg p-6 mb-8', getScoreBgColor(totalScore))}>
+            <div className="text-center">
+              <div className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">종합 점수</div>
+              <div className={cn('text-6xl font-bold mb-2', getScoreColor(totalScore))}>
+                {totalScore.toFixed(1)}/10
+              </div>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">{summary}</p>
             </div>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">{summary}</p>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-lg p-6 mb-8 bg-zinc-100 dark:bg-zinc-800">
+            <div className="text-center">
+              <div className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-2">종합 점수</div>
+              <div className="text-4xl font-bold mb-2 text-zinc-400 dark:text-zinc-500">
+                평가 없음
+              </div>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">{summary}</p>
+            </div>
+          </div>
+        )}
+
+        {(companyStyleInfo || activeKnowledgeBases.length > 0) && (
+          <div className="mb-8 space-y-3">
+            {companyStyleInfo && (
+              <div className="bg-zinc-800 dark:bg-zinc-900 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-zinc-400 dark:text-zinc-500">회사 스타일:</span>
+                  <span className="px-3 py-1 bg-emerald-900/30 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-full text-sm font-medium">
+                    {companyStyleInfo.displayName} 스타일 면접
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {activeKnowledgeBases.length > 0 && (
+              <div className="bg-zinc-800 dark:bg-zinc-900 rounded-lg p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-zinc-400 dark:text-zinc-500">활성화된 지식 베이스:</span>
+                  {activeKnowledgeBases.map((topic) => (
+                    <span
+                      key={topic}
+                      className="px-2.5 py-1 bg-indigo-900/30 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded text-xs font-medium"
+                    >
+                      {topic} AI
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {Object.keys(topicScores).length > 0 && (
           <div className="mb-8">
@@ -118,6 +180,13 @@ export function SessionSummary({
             </ul>
           </div>
         )}
+
+        <ShareableCard
+          totalScore={totalScore}
+          questionCount={questionCount}
+          topics={topics}
+          sessionId={sessionId}
+        />
 
         <div className="flex gap-4 justify-center pt-6 border-t border-zinc-200 dark:border-zinc-800">
           <button

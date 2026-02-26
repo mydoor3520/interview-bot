@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
       await recordLoginAttempt(ip, true);
 
-      const token = signTokenV2(user.id, user.email, user.subscriptionTier);
+      const token = signTokenV2(user.id, user.email, user.subscriptionTier, user.isAdmin);
 
       const response = NextResponse.json({
         success: true,

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthV2 } from '@/lib/auth/require-auth';
+import { requireAdmin } from '@/lib/auth/require-admin';
 import { prisma } from '@/lib/db/prisma';
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuthV2(request);
+  const auth = requireAdmin(request);
   if (!auth.authenticated) return auth.response;
 
   const { searchParams } = new URL(request.url);

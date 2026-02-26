@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 import { validateOrigin } from '@/lib/auth/csrf';
 
-const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/api/auth', '/api/webhooks', '/api/health', '/api/cron', '/api/demo', '/legal', '/pricing', '/demo', '/robots.txt', '/sitemap.xml'];
-const STATIC_PATHS = ['/_next', '/favicon.ico', '/next.svg', '/vercel.svg', '/globe.svg', '/window.svg', '/file.svg'];
+const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email', '/api/auth', '/api/webhooks', '/api/health', '/api/cron', '/api/demo', '/api/resume/preview', '/legal', '/pricing', '/demo', '/robots.txt', '/sitemap.xml'];
+const STATIC_PATHS = ['/_next', '/favicon.ico', '/next.svg', '/vercel.svg', '/globe.svg', '/window.svg', '/file.svg', '/uploads'];
 
 /**
  * 클라이언트 IP 추출.
@@ -158,7 +158,13 @@ export async function middleware(request: NextRequest) {
       }
     }
 
-    return NextResponse.next();
+    // Strip spoofable privilege headers on public paths to prevent header injection
+    const cleanHeaders = new Headers(request.headers);
+    cleanHeaders.delete('x-user-is-admin');
+    cleanHeaders.delete('x-user-id');
+    cleanHeaders.delete('x-user-email');
+    cleanHeaders.delete('x-user-tier');
+    return NextResponse.next({ request: { headers: cleanHeaders } });
   }
 
   // Protected routes - require authentication

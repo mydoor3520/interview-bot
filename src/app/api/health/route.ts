@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { cache } from '@/lib/redis/client';
+import { env } from '@/lib/env';
+import { healthMonitor } from '@/lib/ai/health-monitor';
 
 interface ServiceHealth {
   status: 'ok' | 'down' | 'degraded' | 'not_configured';
@@ -8,7 +10,7 @@ interface ServiceHealth {
   error?: string;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const checks: {
     status: 'ok' | 'degraded' | 'down';
     timestamp: string;
@@ -45,24 +47,48 @@ export async function GET() {
     checks.services.redis = { status: 'not_configured' };
   }
 
-  // AI Proxy check
-  const proxyUrl = process.env.AI_PROXY_URL || 'http://localhost:3456';
-  try {
-    const start = Date.now();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${proxyUrl}/v1/models`, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (res.ok) {
-      checks.services.aiProxy = { status: 'ok', latencyMs: Date.now() - start };
-    } else {
-      checks.services.aiProxy = { status: 'degraded', latencyMs: Date.now() - start };
+  // AI Proxy check (only when proxy is the primary provider)
+  if (env.AI_PRIMARY_PROVIDER === 'proxy') {
+    const proxyUrl = env.AI_PROXY_URL;
+    try {
+      const start = Date.now();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${proxyUrl}/v1/models`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        checks.services.aiProxy = { status: 'ok', latencyMs: Date.now() - start };
+      } else {
+        checks.services.aiProxy = { status: 'degraded', latencyMs: Date.now() - start };
+        checks.status = checks.status === 'ok' ? 'degraded' : checks.status;
+      }
+    } catch (err) {
+      checks.services.aiProxy = { status: 'down', error: err instanceof Error ? err.message : 'Unknown error' };
       checks.status = checks.status === 'ok' ? 'degraded' : checks.status;
     }
-  } catch (err) {
-    checks.services.aiProxy = { status: 'down', error: err instanceof Error ? err.message : 'Unknown error' };
-    checks.status = checks.status === 'ok' ? 'degraded' : checks.status;
+  } else {
+    checks.services.aiProxy = { status: 'not_configured' };
   }
+
+  // AI Provider Health (passive monitoring)
+  const providerHealth = healthMonitor.getAllHealth();
+  checks.services.aiProviderHealth = {
+    proxy: {
+      status: providerHealth.proxy.status,
+      consecutiveFailures: providerHealth.proxy.consecutiveFailures,
+      avgLatencyMs: Math.round(providerHealth.proxy.avgLatencyMs),
+    },
+    api: {
+      status: providerHealth.api.status,
+      consecutiveFailures: providerHealth.api.consecutiveFailures,
+      avgLatencyMs: Math.round(providerHealth.api.avgLatencyMs),
+    },
+  } as any;
+
+  // AI Direct API check (config-based, no active probe)
+  checks.services.aiDirect = {
+    status: env.ANTHROPIC_API_KEY ? 'ok' : 'not_configured',
+  };
 
   // Stripe check (simple API test)
   if (process.env.STRIPE_SECRET_KEY) {
@@ -72,5 +98,24 @@ export async function GET() {
   }
 
   const statusCode = checks.status === 'down' ? 503 : 200;
-  return NextResponse.json(checks, { status: statusCode });
+
+  // Only expose detailed info to admins
+  const isAdmin = request.headers.get('x-user-is-admin') === 'true';
+  if (!isAdmin) {
+    return NextResponse.json(
+      { status: checks.status, timestamp: checks.timestamp },
+      { status: statusCode }
+    );
+  }
+
+  const environment = {
+    nodeEnv: process.env.NODE_ENV || 'development',
+    aiModel: env.AI_MODEL,
+    emailService: process.env.RESEND_API_KEY ? 'resend' : 'console',
+    adminIpWhitelist: !!process.env.ADMIN_ALLOWED_IPS && process.env.ADMIN_ALLOWED_IPS !== '*',
+    aiActiveProvider: env.AI_PRIMARY_PROVIDER,
+    aiAnthropicKeyConfigured: !!env.ANTHROPIC_API_KEY,
+  };
+
+  return NextResponse.json({ ...checks, environment }, { status: statusCode });
 }

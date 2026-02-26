@@ -3,12 +3,15 @@ import { prisma } from '@/lib/db/prisma';
 import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { z } from 'zod';
 import { checkUserRateLimit } from '@/lib/auth/user-rate-limit';
+import { checkPositionLimit, type TierKey } from '@/lib/feature-gate';
 
 const positionSchema = z.object({
   company: z.string().min(1).max(100),
   position: z.string().min(1).max(100),
   jobDescription: z.string().max(10000).optional(),
   requirements: z.array(z.string().max(200)).max(20).optional().default([]),
+  preferredQualifications: z.array(z.string().max(200)).max(20).optional().default([]),
+  requiredExperience: z.string().max(100).optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -24,10 +27,66 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ positions: [] });
     }
 
+    // Parse query parameters
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search')?.trim();
+    const status = searchParams.get('status');
+    const sort = searchParams.get('sort') || 'created';
+    const order = searchParams.get('order') || 'desc';
+
+    // Build where clause
+    const where: any = { profileId: profile.id };
+
+    if (search) {
+      where.OR = [
+        { company: { contains: search, mode: 'insensitive' as const } },
+        { position: { contains: search, mode: 'insensitive' as const } },
+      ];
+    }
+
+    if (status === 'active') {
+      where.isActive = true;
+    } else if (status === 'inactive') {
+      where.isActive = false;
+    }
+
+    // Build orderBy clause
+    let orderBy: any = { createdAt: 'desc' };
+    if (sort === 'company') {
+      orderBy = { company: order };
+    } else if (sort === 'deadline') {
+      orderBy = { deadline: order };
+    } else if (sort === 'created') {
+      orderBy = { createdAt: order };
+    }
+
     const positions = await prisma.targetPosition.findMany({
-      where: { profileId: profile.id },
-      include: { _count: { select: { sessions: true } } },
-      orderBy: { createdAt: 'desc' },
+      where,
+      select: {
+        id: true,
+        company: true,
+        position: true,
+        isActive: true,
+        techStack: true,
+        requirements: true,
+        jobDescription: true,
+        preferredQualifications: true,
+        requiredExperience: true,
+        notes: true,
+        salaryRange: true,
+        location: true,
+        employmentType: true,
+        deadline: true,
+        benefits: true,
+        companySize: true,
+        sourceUrl: true,
+        sourceSite: true,
+        lastFetched: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { sessions: true, generatedQuestions: true } },
+      },
+      orderBy,
     });
 
     return NextResponse.json({ positions });
@@ -56,6 +115,16 @@ export async function POST(request: NextRequest) {
     });
     if (!profile) {
       return NextResponse.json({ error: '프로필을 먼저 생성해주세요.' }, { status: 404 });
+    }
+
+    // Feature gate: check position limit
+    const tier = (auth.user.tier || 'FREE') as TierKey;
+    const positionCheck = await checkPositionLimit(profile.id, tier);
+    if (!positionCheck.allowed) {
+      return NextResponse.json(
+        { error: positionCheck.message, code: 'POSITION_LIMIT_REACHED', upgradeUrl: '/pricing', retryable: false },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();

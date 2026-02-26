@@ -17,7 +17,7 @@ function createMockSession(overrides: Record<string, unknown> = {}) {
     targetPositionId: null,
     topics: ['JavaScript', 'React'],
     difficulty: 'mid',
-    evaluationMode: 'after_complete',
+    evaluationMode: 'immediate',
     status: 'completed',
     questionCount: 2,
     endReason: 'user_ended',

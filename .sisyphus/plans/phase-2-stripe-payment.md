@@ -827,7 +827,7 @@ async function calculateUsage(userId: string, startDate: Date) {
   const subscription = await prisma.subscription.findUnique({ where: { userId } });
   const limit = TIER_LIMITS[subscription!.tier].maxSessions;
 
-  // Pro 티어 무제한 세션 환불 계산
+  // Pro 티어 월 50회 세션 환불 계산
   if (limit === null) {
     // Pro 티어: 기간 기반 비례 계산 (세션 수 무의미)
     const payment = await prisma.payment.findFirst({
@@ -863,7 +863,7 @@ async function calculateUsage(userId: string, startDate: Date) {
 │  │  Free           │  │  Pro    인기!  │                      │
 │  │  ₩0/월          │  │  ₩24,900/월    │                      │
 │  │                 │  │                │                      │
-│  │ 3세션/월        │  │ 무제한 세션    │                      │
+│  │ 1세션/월        │  │ 월50회 세션    │                      │
 │  │ Haiku 4.5      │  │ Haiku 4.5     │                      │
 │  │ 10질문/세션     │  │ 30질문/세션    │                      │
 │  │ 맞춤 코스      │  │ 맞춤 코스     │                      │

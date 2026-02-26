@@ -16,6 +16,7 @@ dist/
 .env.local
 .env.development.local
 .env.test.local
+.env.production
 .env.production.local
 
 # Debug
@@ -42,8 +43,11 @@ postgres_data/
 # Claude Code
 .claude/
 
-# Sisyphus (planning docs - keep tracked)
-# .sisyphus/
+# Sisyphus (planning docs - local only)
+.sisyphus/
+
+# Oh-My-ClaudeCode state
+.omc/
 
 /src/generated/prisma
 
@@ -51,3 +55,6 @@ postgres_data/
 .auth/
 playwright-report/
 test-results/
+
+# User uploads
+public/uploads/

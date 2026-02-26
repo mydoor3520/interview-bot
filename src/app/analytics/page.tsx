@@ -145,7 +145,7 @@ export default function AnalyticsPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold">면접 분석</h1>
           <p className="mt-2 text-zinc-400">
-            {isPro ? '고급 분석 대시보드' : '기본 통계 (PRO로 업그레이드하면 상세 분석을 확인할 수 있습니다)'}
+            통계 대시보드
           </p>
         </div>
 
@@ -269,21 +269,6 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Upgrade CTA for Free users */}
-        {!isPro && (
-          <div className="mt-8 rounded-xl border-2 border-blue-500/30 bg-gradient-to-r from-blue-950/30 to-zinc-900 p-8 text-center">
-            <h3 className="text-xl font-bold mb-2">더 자세한 분석이 필요하신가요?</h3>
-            <p className="text-zinc-400 mb-6">
-              PRO 플랜으로 업그레이드하면 토픽별 성과, 점수 추이, 취약 분야 분석, 맞춤 학습 추천을 확인할 수 있습니다.
-            </p>
-            <Link
-              href="/pricing"
-              className="inline-flex items-center px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
-            >
-              PRO 업그레이드
-            </Link>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -28,30 +28,30 @@ async function main() {
   // Create Pro product
   const product = await stripe.products.create({
     name: 'Interview Bot Pro',
-    description: 'AI 모의 면접 프로 플랜 - 무제한 세션, 30질문/세션, 실시간 피드백',
+    description: 'AI 모의 면접 프로 플랜 - 월 50회 세션, 15질문/세션, 실시간 피드백',
     metadata: { tier: 'PRO' },
   });
   console.log(`✓ Product created: ${product.id} (${product.name})`);
 
-  // Monthly price (KRW 24,900)
+  // Monthly price (KRW 19,900)
   const monthlyPrice = await stripe.prices.create({
     product: product.id,
     currency: 'krw',
-    unit_amount: 24900,
+    unit_amount: 19900,
     recurring: { interval: 'month' },
     metadata: { tier: 'PRO', cycle: 'MONTHLY' },
   });
-  console.log(`✓ Monthly price created: ${monthlyPrice.id} (₩24,900/월)`);
+  console.log(`✓ Monthly price created: ${monthlyPrice.id} (₩19,900/월)`);
 
-  // Yearly price (KRW 249,000)
+  // Yearly price (KRW 189,000 — ~21% discount, ₩15,750/mo equivalent)
   const yearlyPrice = await stripe.prices.create({
     product: product.id,
     currency: 'krw',
-    unit_amount: 249000,
+    unit_amount: 189000,
     recurring: { interval: 'year' },
     metadata: { tier: 'PRO', cycle: 'YEARLY' },
   });
-  console.log(`✓ Yearly price created: ${yearlyPrice.id} (₩249,000/년)`);
+  console.log(`✓ Yearly price created: ${yearlyPrice.id} (₩189,000/년)`);
 
   console.log('\n--- Environment Variables ---');
   console.log(`STRIPE_PRICE_PRO_MONTHLY=${monthlyPrice.id}`);

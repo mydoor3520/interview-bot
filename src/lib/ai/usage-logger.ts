@@ -2,7 +2,7 @@ import { prismaBase } from '@/lib/db/prisma';
 
 interface UsageLogParams {
   sessionId?: string;
-  endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit';
+  endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit' | 'portfolio_guide';
   model: string;
   promptTokens: number;
   completionTokens: number;

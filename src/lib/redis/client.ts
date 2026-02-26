@@ -1,6 +1,9 @@
 import Redis from 'ioredis';
 
 let redis: Redis | null = null;
+let lastConnectAttempt = 0;
+const RECONNECT_INTERVAL = 30_000;
+const MAX_MEMORY_STORE_SIZE = 10_000;
 const memoryStore = new Map<string, { value: string; expireAt?: number }>();
 
 function getRedisClient(): Redis | null {
@@ -8,6 +11,10 @@ function getRedisClient(): Redis | null {
 
   const url = process.env.REDIS_URL;
   if (!url) return null;
+
+  const now = Date.now();
+  if (now - lastConnectAttempt < RECONNECT_INTERVAL) return null;
+  lastConnectAttempt = now;
 
   try {
     redis = new Redis(url, {
@@ -79,6 +86,10 @@ export const cache = {
       }
     }
 
+    if (memoryStore.size >= MAX_MEMORY_STORE_SIZE) {
+      const oldestKey = memoryStore.keys().next().value;
+      if (oldestKey !== undefined) memoryStore.delete(oldestKey);
+    }
     memoryStore.set(key, {
       value,
       expireAt: ttlSeconds ? Date.now() + ttlSeconds * 1000 : undefined,

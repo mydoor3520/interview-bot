@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { StripeAdapter } from '@/lib/payment/stripe-adapter';
 import { prisma } from '@/lib/db/prisma';
+import { env } from '@/lib/env';
+import { checkUserRateLimit } from '@/lib/auth/user-rate-limit';
 
 export async function POST(request: NextRequest) {
   const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  const rateLimit = checkUserRateLimit(auth.user.userId, 'payment', 5);
+  if (rateLimit) {
+    return NextResponse.json(
+      { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+    );
+  }
 
   try {
     const subscription = await prisma.subscription.findUnique({
@@ -19,7 +29,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = env.NEXT_PUBLIC_APP_URL;
     const adapter = new StripeAdapter();
     const { url } = await adapter.createCustomerPortalSession({
       customerId: subscription.customerId,

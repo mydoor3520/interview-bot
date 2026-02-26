@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils/cn';
+
+const TrendChart = dynamic(() => import('@/components/dashboard/TrendChart'), { ssr: false });
+const JobParsingModal = dynamic(() => import('@/components/JobParsingModal').then(mod => ({ default: mod.JobParsingModal })), { ssr: false });
+const ProfileCompleteness = dynamic(() => import('@/components/dashboard/ProfileCompleteness'), { ssr: false });
+const Benchmark = dynamic(() => import('@/components/dashboard/Benchmark'), { ssr: false });
 
 interface Stats {
   totalSessions: number;
@@ -17,6 +22,7 @@ interface Stats {
     id: string;
     startedAt: string;
     difficulty: string;
+    interviewType: string | null;
     totalScore: number | null;
     _count: { questions: number };
   }>;
@@ -28,10 +34,24 @@ const DIFFICULTIES = {
   senior: '시니어',
 };
 
+const INTERVIEW_TYPE_BADGE: Record<string, { label: string; className: string }> = {
+  technical: { label: '기술', className: 'bg-blue-500/20 text-blue-400' },
+  behavioral: { label: '인성', className: 'bg-purple-500/20 text-purple-400' },
+  mixed: { label: '통합', className: 'bg-green-500/20 text-green-400' },
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeSession, setActiveSession] = useState<{
+    id: string;
+    topics: string[];
+    difficulty: string;
+    startedAt: string;
+    _count: { questions: number };
+  } | null>(null);
+  const [showParsingModal, setShowParsingModal] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -51,6 +71,23 @@ export default function DashboardPage() {
     fetchStats();
   }, []);
 
+  useEffect(() => {
+    const fetchActiveSession = async () => {
+      try {
+        const res = await fetch('/api/interview?status=in_progress');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sessions && data.sessions.length > 0) {
+            setActiveSession(data.sessions[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch active session:', error);
+      }
+    };
+    fetchActiveSession();
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -58,6 +95,37 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const handleParsingSave = async (data: {
+    company: string;
+    position: string;
+    jobDescription: string;
+    requirements: string[];
+    preferredQualifications: string[];
+    requiredExperience: string;
+  }) => {
+    try {
+      const res = await fetch('/api/positions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: data.company,
+          position: data.position,
+          jobDescription: data.jobDescription || undefined,
+          requirements: data.requirements.length > 0 ? data.requirements : undefined,
+          preferredQualifications: data.preferredQualifications.length > 0 ? data.preferredQualifications : undefined,
+          requiredExperience: data.requiredExperience || undefined,
+        }),
+      });
+
+      if (res.ok) {
+        setShowParsingModal(false);
+        router.push('/positions');
+      }
+    } catch (error) {
+      console.error('Failed to save position:', error);
+    }
+  };
 
   if (!stats || stats.totalSessions === 0) {
     return (
@@ -74,6 +142,11 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
+        <JobParsingModal
+          isOpen={showParsingModal}
+          onClose={() => setShowParsingModal(false)}
+          onSave={handleParsingSave}
+        />
       </div>
     );
   }
@@ -87,6 +160,74 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-black p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-white mb-8">대시보드</h1>
+
+        {activeSession && (
+          <div className="mb-8 bg-blue-950/50 border border-blue-800 rounded-lg p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-3 h-3 rounded-full bg-blue-400 animate-pulse" />
+                <div>
+                  <p className="text-white font-medium">진행중인 면접이 있습니다</p>
+                  <p className="text-sm text-zinc-400 mt-0.5">
+                    {activeSession.topics.join(', ')} · {DIFFICULTIES[activeSession.difficulty as keyof typeof DIFFICULTIES] || activeSession.difficulty} · 질문 {activeSession._count.questions}개
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    if (!confirm('진행중인 면접을 포기하시겠습니까?')) return;
+                    try {
+                      await fetch('/api/interview', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: activeSession.id, status: 'abandoned', endReason: 'user_ended' }),
+                      });
+                      setActiveSession(null);
+                    } catch {}
+                  }}
+                  className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                >
+                  포기하기
+                </button>
+                <button
+                  onClick={() => router.push(`/interview/${activeSession.id}`)}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-500 transition-colors"
+                >
+                  이어하기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Action Card */}
+        <div className="mb-8">
+          <button
+            onClick={() => setShowParsingModal(true)}
+            className="w-full p-6 bg-gradient-to-br from-indigo-600/20 to-blue-600/20 border-2 border-indigo-500/30 rounded-xl hover:border-indigo-500/50 transition-all group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-indigo-500/20 rounded-lg flex items-center justify-center group-hover:bg-indigo-500/30 transition-colors">
+                <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="text-lg font-semibold text-white mb-1">채용공고 가져오기</h3>
+                <p className="text-sm text-zinc-400">URL로 채용공고를 자동 분석하여 추가하세요</p>
+              </div>
+              <svg className="w-5 h-5 text-indigo-400 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        </div>
+
+        {/* Profile Completeness */}
+        <div className="mb-8">
+          <ProfileCompleteness />
+        </div>
 
         {/* Stat Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -128,23 +269,7 @@ export default function DashboardPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-white mb-4">점수 추이 (최근 30일)</h2>
             {stats.recentTrend.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={stats.recentTrend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#71717a"
-                    tickFormatter={(date) => new Date(date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-                  />
-                  <YAxis stroke="#71717a" domain={[0, 10]} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px' }}
-                    labelStyle={{ color: '#a1a1aa' }}
-                    itemStyle={{ color: '#ffffff' }}
-                  />
-                  <Line type="monotone" dataKey="avgScore" stroke="#ffffff" strokeWidth={2} dot={{ fill: '#ffffff' }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <TrendChart data={stats.recentTrend} />
             ) : (
               <p className="text-zinc-400 text-center py-12">데이터가 없습니다.</p>
             )}
@@ -187,6 +312,11 @@ export default function DashboardPage() {
               <p className="text-zinc-400 text-center py-12">데이터가 없습니다.</p>
             )}
           </div>
+        </div>
+
+        {/* Benchmark Section */}
+        <div className="mb-8">
+          <Benchmark />
         </div>
 
         {/* Weak Topics & Recent Sessions */}
@@ -237,9 +367,16 @@ export default function DashboardPage() {
                           day: 'numeric',
                         })}
                       </p>
-                      <span className="text-xs px-2 py-1 bg-zinc-700 rounded text-zinc-300">
-                        {DIFFICULTIES[session.difficulty as keyof typeof DIFFICULTIES]}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {session.interviewType && INTERVIEW_TYPE_BADGE[session.interviewType] && (
+                          <span className={cn('text-xs px-2 py-1 rounded font-medium', INTERVIEW_TYPE_BADGE[session.interviewType].className)}>
+                            {INTERVIEW_TYPE_BADGE[session.interviewType].label}
+                          </span>
+                        )}
+                        <span className="text-xs px-2 py-1 bg-zinc-700 rounded text-zinc-300">
+                          {DIFFICULTIES[session.difficulty as keyof typeof DIFFICULTIES]}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-zinc-400 text-xs">{session._count.questions}개 질문</span>
@@ -268,6 +405,12 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <JobParsingModal
+        isOpen={showParsingModal}
+        onClose={() => setShowParsingModal(false)}
+        onSave={handleParsingSave}
+      />
     </div>
   );
 }

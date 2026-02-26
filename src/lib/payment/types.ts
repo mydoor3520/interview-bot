@@ -20,22 +20,10 @@ export interface PaymentAdapter {
   refundPayment(paymentIntentId: string, amount?: number): Promise<void>;
 }
 
-// Tier limits configuration
-export const TIER_LIMITS = {
-  FREE: {
-    maxSessions: 3, // per month
-    maxQuestionsPerSession: 10,
-  },
-  PRO: {
-    maxSessions: null, // unlimited
-    maxQuestionsPerSession: 30,
-  },
-} as const;
-
 // Price configuration (environment-driven)
 export const PRICE_CONFIG = {
   PRO: {
-    monthly: 24_900, // KRW
-    yearly: 249_000, // KRW (2 months free)
+    monthly: 19_900, // KRW
+    yearly: 189_000, // KRW (~21% 할인, 월 ₩15,750)
   },
 } as const;

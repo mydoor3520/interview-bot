@@ -23,6 +23,8 @@ export const TIER_LIMITS = {
     adaptiveDifficulty: true,
     crossTechQuestions: true,
     monthlyResumeEdits: 3 as number | null,
+    monthlyPortfolioGuides: 2 as number | null,
+    maxPortfolioProjects: 5 as number | null,
   },
   PRO: {
     monthlySessions: 30,
@@ -46,6 +48,8 @@ export const TIER_LIMITS = {
     adaptiveDifficulty: true,
     crossTechQuestions: true,
     monthlyResumeEdits: null as number | null,
+    monthlyPortfolioGuides: null as number | null,
+    maxPortfolioProjects: 20 as number | null,
   },
 } as const;
 
@@ -194,6 +198,67 @@ export async function checkResumeEditLimit(
   }
 
   return { allowed: true, remaining };
+}
+
+export async function checkPortfolioGuideLimit(
+  userId: string,
+  tier: TierKey
+): Promise<{ allowed: boolean; remaining: number | null; message?: string }> {
+  const limit = TIER_LIMITS[tier].monthlyPortfolioGuides;
+
+  // null = 무제한 (PRO)
+  if (limit === null) {
+    return { allowed: true, remaining: null };
+  }
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const count = await prisma.aIUsageLog.count({
+    where: {
+      userId,
+      endpoint: 'portfolio_guide',
+      success: true,
+      createdAt: { gte: monthStart },
+    },
+  });
+
+  if (count >= limit) {
+    return {
+      allowed: false,
+      remaining: 0,
+      message: `이번 달 포트폴리오 가이드 횟수(${limit}회)를 모두 사용했습니다.`,
+    };
+  }
+
+  return { allowed: true, remaining: limit - count };
+}
+
+export async function checkPortfolioProjectLimit(
+  profileId: string,
+  tier: TierKey
+): Promise<{ allowed: boolean; current: number; limit: number | null; message?: string }> {
+  const limit = TIER_LIMITS[tier].maxPortfolioProjects;
+
+  if (limit === null) {
+    return { allowed: true, current: 0, limit: null };
+  }
+
+  const count = await prisma.portfolioProject.count({
+    where: { profileId },
+  });
+
+  if (count >= limit) {
+    return {
+      allowed: false,
+      current: count,
+      limit,
+      message: `포트폴리오 프로젝트는 최대 ${limit}개까지 등록할 수 있습니다.`,
+    };
+  }
+
+  return { allowed: true, current: count, limit };
 }
 
 export async function checkDailySessionLimit(

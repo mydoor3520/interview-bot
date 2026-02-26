@@ -23,13 +23,13 @@ export async function GET(request: NextRequest) {
     const hasAdvanced = checkBooleanFeature(tierKey, 'advancedAnalytics');
 
     if (!hasAdvanced) {
-      // Free tier: basic stats only
+      // Free tier: basic stats only (select only score from evaluation)
       const sessions = await prisma.interviewSession.findMany({
         where: { userId, status: 'completed', deletedAt: null },
-        include: { questions: { include: { evaluation: true } } },
+        include: { questions: { select: { category: true, evaluation: { select: { score: true } } } } },
         orderBy: { completedAt: 'desc' },
         take: 10,
-      });
+      }) as unknown as Parameters<typeof calculateAverage>[0];
 
       return NextResponse.json({
         tier: tierKey,
@@ -45,13 +45,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Pro: full analytics
+    // Pro: full analytics (select only score from evaluation)
     const sessions = await prisma.interviewSession.findMany({
       where: { userId, status: 'completed', deletedAt: null },
-      include: { questions: { include: { evaluation: true } } },
+      include: { questions: { select: { category: true, evaluation: { select: { score: true } } } } },
       orderBy: { completedAt: 'desc' },
       take: 100,
-    });
+    }) as unknown as Parameters<typeof calculateAverage>[0];
 
     const totalSessions = sessions.length;
     const averageScore = calculateAverage(sessions);

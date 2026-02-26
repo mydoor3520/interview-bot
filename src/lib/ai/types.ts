@@ -1,6 +1,11 @@
+export type AITextContentBlock = { type: 'text'; text: string };
+export type AIImageContentBlock = { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
+export type AIDocumentContentBlock = { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } };
+export type AIContentBlock = AITextContentBlock | AIImageContentBlock | AIDocumentContentBlock;
+
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | AIContentBlock[];
 }
 
 export interface AIStreamOptions {
@@ -66,5 +71,7 @@ export interface ProfileContext {
     position: string;
     jobDescription?: string;
     requirements: string[];
+    preferredQualifications: string[];
+    requiredExperience?: string;
   };
 }

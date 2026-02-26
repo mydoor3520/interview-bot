@@ -35,8 +35,8 @@
 ```
 [ ] monetization-strategy.md
     - 3.1 티어 구조 표 (Line ~152): 3-tier → 2-tier로 재작성
-      - FREE: ₩0 / 3세션/월 / 10질문/세션 / 사후평가만 / 기본통계 / 30일보관 / 1단계팔로업
-      - PRO: ₩24,900/월 (₩249,000/연) / 무제한 / 30질문/세션 / 실시간+사후 / 고급분석 / 무제한보관 / 3단계팔로업 / 맞춤코스 / 우선지원
+      - FREE: ₩0 / 1세션/월 / 7질문/세션 / 사후평가만 / 기본통계 / 30일보관 / 2단계팔로업 / 이메일인증필수
+      - PRO: ₩24,900/월 (₩249,000/연) / 월50회 / 15질문/세션 / 실시간+사후 / 고급분석 / 무제한보관 / 2단계팔로업 / 맞춤코스 / 우선지원
     - 3.2.2 질문당 비용 표: BASIC 행 제거
     - 3.2.3 수익성 분석: BASIC 행 제거, FREE/PRO만
     - v4 변경사항 섹션: "3단계(Free/Basic/Pro)" → "2단계(Free/Pro)"
@@ -395,10 +395,10 @@
       `;
 ```
 
-### W-2. Pro 티어 무제한 세션 환불 계산
+### W-2. Pro 티어 월 50회 세션 환불 계산
 
 ```
-[ ] 환불 로직에 무제한 세션 처리 추가:
+[ ] 환불 로직에 월 50회 세션 처리 추가:
     if (limit === Infinity) {
       // Pro 티어: 기간 기반 비례 계산
       const daysPassed = (Date.now() - payment.createdAt.getTime()) / 86400000;
@@ -436,13 +436,13 @@
        - JWT V2 동작 확인
 
     2. TIER_LIMITS 상수 (2-tier):
-       FREE: { monthlySessions: 3, questionsPerSession: 10, evaluationMode: 'after_complete', followUpDepth: 1, historyRetention: 30, customCourse: false }
-       PRO: { monthlySessions: null, questionsPerSession: 30, evaluationMode: 'both', followUpDepth: 3, historyRetention: null, customCourse: true }
+       FREE: { monthlySessions: 1, questionsPerSession: 7, evaluationMode: 'after_complete', followUpDepth: 2, historyRetention: 30, customCourse: false }
+       PRO: { monthlySessions: 50, questionsPerSession: 15, evaluationMode: 'both', followUpDepth: 2, historyRetention: null, customCourse: true }
 
     3. checkSessionLimit() 구현:
        - prisma.interviewSession.count()로 이번 달 세션 수 확인
        - FREE: 3개 초과 시 차단 + 업그레이드 유도 메시지
-       - PRO: null (무제한) → 제한 없음
+       - PRO: 50 → 월 50회 제한
 
     4. checkBooleanFeature() 구현:
        - TIER_LIMITS[tier][feature] boolean 체크
@@ -458,7 +458,7 @@
 
     7. 수용 기준:
        - "Free 사용자 4번째 세션 생성 시 403 + 업그레이드 메시지"
-       - "Pro 사용자 무제한 세션 생성 가능"
+       - "Pro 사용자 월 50회 세션 생성 가능"
        - "AIUsageLog에 userId, cost, tier 필드 기록 확인"
 ```
 
@@ -554,8 +554,8 @@
 
 ```
 [ ] 임계값 계산 근거 추가:
-    FREE 사용자 일일 최대 비용: 3세션 × 10질문 × $0.006 = $0.18 → $1 임계값 (5.5배)
-    PRO 사용자 일일 최대 비용: ~30질문 × $0.006 × 5세션 = $0.90 → $20 임계값 (22배)
+    FREE 사용자 월 최대 비용: 1세션 × 7질문 × $0.006 = $0.042 → $0.50 임계값 (12배)
+    PRO 사용자 월 최대 비용: 50세션 × 15질문 × $0.006 = $4.50 → $20 임계값 (4.4배)
     → "일일 정상 범위의 5-20배를 임계값으로 설정"
 ```
 

@@ -1,3 +1,5 @@
+import { env } from '@/lib/env';
+
 interface EmailOptions {
   to: string;
   subject: string;
@@ -15,14 +17,16 @@ function getResend() {
   return resendClient;
 }
 
-const EMAIL_FROM = process.env.EMAIL_FROM || 'InterviewBot <noreply@interviewbot.com>';
+function getEmailFrom() {
+  return env.EMAIL_FROM;
+}
 
 export async function sendEmail(options: EmailOptions): Promise<void> {
   const resend = getResend();
   if (resend) {
     try {
       await resend.emails.send({
-        from: EMAIL_FROM,
+        from: getEmailFrom(),
         to: options.to,
         subject: options.subject,
         html: options.html,
@@ -44,7 +48,7 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
 }
 
 export async function sendVerificationEmail(email: string, token: string): Promise<void> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = env.NEXT_PUBLIC_APP_URL;
   const verifyUrl = `${baseUrl}/verify-email?token=${token}`;
 
   await sendEmail({
@@ -60,7 +64,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
 }
 
 export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = env.NEXT_PUBLIC_APP_URL;
   const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
   await sendEmail({

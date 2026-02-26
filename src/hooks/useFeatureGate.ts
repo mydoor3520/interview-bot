@@ -20,6 +20,8 @@ interface FeatureGateData {
     adaptiveDifficulty: boolean;
     crossTechQuestions: boolean;
     monthlyResumeEdits: number | null;
+    monthlyPortfolioGuides: number | null;
+    maxPortfolioProjects: number | null;
   };
   usage: {
     sessionsThisMonth: number | null;
@@ -28,6 +30,7 @@ interface FeatureGateData {
     monthlyCostUsd: number;
     currentPositionCount: number;
     remainingResumeEdits: number | null;
+    remainingPortfolioGuides: number | null;
   };
 }
 

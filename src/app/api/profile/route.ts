@@ -17,7 +17,13 @@ const updateProfileSchema = createProfileSchema.partial().extend({
   resumeText: z.string().max(10000).optional(),
   strengths: z.array(z.string().max(200)).max(10).optional(),
   weaknesses: z.array(z.string().max(200)).max(10).optional(),
-  photoUrl: z.string().max(2048).refine((v) => v.startsWith('/uploads/') || /^https?:\/\//.test(v), { message: '올바른 URL 또는 업로드 경로여야 합니다.' }).optional().nullable(),
+  photoUrl: z.string().max(2048).refine((v) => {
+    if (/^https?:\/\//.test(v)) return true;
+    if (!v.startsWith('/uploads/')) return false;
+    // Path traversal 방지
+    if (v.includes('..') || v.includes('%2e') || v.includes('%2E') || v.includes('\0')) return false;
+    return true;
+  }, { message: '올바른 URL 또는 업로드 경로여야 합니다.' }).optional().nullable(),
 });
 
 export async function GET(request: NextRequest) {

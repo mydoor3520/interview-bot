@@ -5,7 +5,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen bg-zinc-950 text-zinc-300">
       <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
         <h1 className="text-3xl font-bold text-white mb-8">개인정보처리방침</h1>
-        <p className="text-sm text-zinc-500 mb-12">최종 수정일: 2026년 2월 6일</p>
+        <p className="text-sm text-zinc-500 mb-12">최종 수정일: 2026년 2월 14일</p>
 
         <div className="space-y-10 text-sm leading-relaxed">
           <section>
@@ -22,6 +22,9 @@ export default function PrivacyPage() {
               <li>기술 스택 및 숙련도</li>
               <li>자기소개서 및 이력서 텍스트</li>
               <li>지원 회사/포지션 정보</li>
+              <li>유입 경로 (UTM 파라미터)</li>
+              <li>AI 데이터 활용 동의 여부</li>
+              <li>면접 만족도 평가 (1-5점)</li>
             </ul>
             <h3 className="font-medium text-zinc-200 mb-2">자동 수집 항목</h3>
             <ul className="list-disc pl-6 space-y-1">
@@ -44,12 +47,41 @@ export default function PrivacyPage() {
           </section>
 
           <section>
+            <h2 className="text-xl font-semibold text-white mb-4">2-1. AI 서비스 개선을 위한 데이터 활용</h2>
+            <p className="mb-4">당사는 이용자의 <strong>선택적 동의</strong>를 받아 다음과 같이 데이터를 활용할 수 있습니다:</p>
+
+            <h3 className="font-medium text-zinc-200 mb-2">활용 범위:</h3>
+            <ul className="list-disc pl-6 space-y-1 mb-4">
+              <li>면접 질문 및 답변 데이터의 통계적 분석</li>
+              <li>AI 면접 질문 품질 개선</li>
+              <li>난이도 조정 및 평가 정확도 향상</li>
+              <li>주제별/기술별 면접 트렌드 분석</li>
+            </ul>
+
+            <h3 className="font-medium text-zinc-200 mb-2">데이터 보호 조치:</h3>
+            <ul className="list-disc pl-6 space-y-1 mb-4">
+              <li>모든 데이터는 가명 처리(pseudonymization)하여 분석</li>
+              <li>개인 식별이 불가능한 형태로만 활용</li>
+              <li>분석 결과는 통계 목적으로만 사용</li>
+              <li>제3자에게 개별 데이터 제공 불가</li>
+            </ul>
+
+            <h3 className="font-medium text-zinc-200 mb-2">동의 및 철회:</h3>
+            <ul className="list-disc pl-6 space-y-1">
+              <li>회원가입 시 선택적으로 동의할 수 있습니다</li>
+              <li>동의하지 않아도 서비스 이용에 제한이 없습니다</li>
+              <li>프로필 설정에서 언제든지 동의를 철회할 수 있습니다</li>
+              <li>동의 철회 시 이후 데이터는 AI 개선에 활용되지 않습니다</li>
+            </ul>
+          </section>
+
+          <section>
             <h2 className="text-xl font-semibold text-white mb-4">3. 보유 기간</h2>
             <ul className="list-disc pl-6 space-y-1">
               <li>회원 정보: 회원 탈퇴 후 30일간 보관 후 영구 삭제</li>
               <li>결제 기록: 5년 (전자상거래법)</li>
               <li>접속 로그: 3개월 (통신비밀보호법)</li>
-              <li>면접 세션 데이터: 무료 회원 30일, PRO 회원 무제한</li>
+              <li>면접 세션 데이터: 무료 베타 기간 90일 (추후 변경 가능)</li>
             </ul>
           </section>
 
@@ -107,6 +139,17 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">8. 쿠키 사용</h2>
             <p>당사는 인증 토큰 저장을 위해 쿠키를 사용합니다. 브라우저 설정에서 쿠키 사용을 거부할 수 있으나, 이 경우 서비스 이용이 제한될 수 있습니다.</p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-white mb-4">8-1. 마케팅 및 유입 경로 추적</h2>
+            <p className="mb-4">당사는 서비스 개선 및 마케팅 효과 측정을 위해 다음 정보를 수집할 수 있습니다:</p>
+            <ul className="list-disc pl-6 space-y-1 mb-4">
+              <li>UTM 파라미터 (utm_source, utm_medium, utm_campaign)</li>
+              <li>레퍼럴 코드</li>
+              <li>회원가입 경로</li>
+            </ul>
+            <p>이 정보는 서비스 품질 개선과 이용자 경험 최적화를 위해서만 사용되며, 제3자에게 제공되지 않습니다.</p>
           </section>
 
           <section>

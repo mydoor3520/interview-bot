@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthV2 } from '@/lib/auth/require-auth';
+import { requireAdmin } from '@/lib/auth/require-admin';
 import { prismaBase as prisma } from '@/lib/db/prisma';
 
 /**
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const auth = requireAuthV2(request);
+  const auth = requireAdmin(request);
   if (!auth.authenticated) return auth.response;
 
   const retentionDays = 90;

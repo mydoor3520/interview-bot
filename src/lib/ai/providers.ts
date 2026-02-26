@@ -43,6 +43,10 @@ function convertMessagesForAnthropic(messages: AIMessage[]): unknown[] {
         // Not a data URL (regular URL) — keep OpenAI format
         return block;
       }
+      if (block.type === 'document') {
+        // Pass document blocks through as-is (Anthropic native format)
+        return block;
+      }
       return block;
     });
     return { ...msg, content: convertedContent };

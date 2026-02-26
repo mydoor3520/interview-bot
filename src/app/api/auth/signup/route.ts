@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db/prisma';
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import { sendVerificationEmail } from '@/lib/email';
+import { checkUserRateLimit } from '@/lib/auth/user-rate-limit';
 
 const signupSchema = z.object({
   email: z.string().email('유효한 이메일을 입력해주세요.'),
@@ -13,10 +14,25 @@ const signupSchema = z.object({
     .min(8, '비밀번호는 8자 이상이어야 합니다.')
     .max(100, '비밀번호는 100자 이하여야 합니다.'),
   name: z.string().min(1, '이름을 입력해주세요.').max(50).optional(),
+  signupSource: z.string().max(500).optional(),
+  aiDataConsent: z.boolean().optional().default(false),
 });
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || '127.0.0.1';
+
+    // IP-based rate limit: 5 signups per hour
+    const rateLimit = checkUserRateLimit(ip, 'signup', 5, 60 * 60 * 1000);
+    if (rateLimit) {
+      return NextResponse.json(
+        { error: '너무 많은 요청입니다. 잠시 후 다시 시도해주세요.' },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+      );
+    }
+
     const body = await request.json();
     const parsed = signupSchema.safeParse(body);
 
@@ -27,7 +43,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password, name } = parsed.data;
+    const { email, password, name, signupSource, aiDataConsent } = parsed.data;
 
     // Check for existing user
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -42,7 +58,8 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password);
 
     // Generate email verification token
-    const emailVerifyToken = randomBytes(32).toString('hex');
+    const skipVerification = process.env.SKIP_EMAIL_VERIFICATION === 'true';
+    const emailVerifyToken = skipVerification ? null : randomBytes(32).toString('hex');
 
     // Create User + UserProfile in transaction
     const user = await prisma.$transaction(async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
@@ -51,8 +68,11 @@ export async function POST(request: NextRequest) {
           email,
           passwordHash,
           name: name || null,
+          emailVerified: skipVerification ? true : false,
           emailVerifyToken,
-          emailVerifyTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+          emailVerifyTokenExpiry: skipVerification ? null : new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+          signupSource: signupSource || null,
+          aiDataConsent: aiDataConsent ?? false,
           profile: {
             create: {
               name: name || '',
@@ -65,13 +85,15 @@ export async function POST(request: NextRequest) {
       return newUser;
     });
 
-    // Send verification email (non-blocking)
-    sendVerificationEmail(email, emailVerifyToken).catch((err) =>
-      console.error('[AUTH] Failed to send verification email:', err)
-    );
+    // Send verification email (non-blocking) - skip if verification is disabled
+    if (!skipVerification && emailVerifyToken) {
+      sendVerificationEmail(email, emailVerifyToken).catch((err) =>
+        console.error('[AUTH] Failed to send verification email:', err)
+      );
+    }
 
     // Sign JWT V2 with user identity
-    const token = signTokenV2(user.id, user.email, user.subscriptionTier);
+    const token = signTokenV2(user.id, user.email, user.subscriptionTier, false);
 
     const response = NextResponse.json(
       {

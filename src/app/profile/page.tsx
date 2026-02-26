@@ -9,6 +9,10 @@ import { ExperienceEditor } from '@/components/profile/ExperienceEditor';
 import { ResumeParseModal } from '@/components/profile/ResumeParseModal';
 import { ResumeEditModal } from '@/components/resume/ResumeEditModal';
 import { ResumeEditHistory } from '@/components/resume/ResumeEditHistory';
+import { ResumeGenerateModal } from '@/components/resume/ResumeGenerateModal';
+import { ResumeHistory } from '@/components/resume/ResumeHistory';
+import { PortfolioProjectList } from '@/components/portfolio/PortfolioProjectList';
+import { PortfolioGuideHistory } from '@/components/portfolio/PortfolioGuideHistory';
 
 interface Profile {
   id: string;
@@ -17,6 +21,7 @@ interface Profile {
   totalYearsExp: number;
   currentRole: string;
   currentCompany: string | null;
+  photoUrl: string | null;
   selfIntroduction: string | null;
   resumeText: string | null;
   strengths: string[];
@@ -37,6 +42,7 @@ interface Profile {
     description: string | null;
     techStack: string[];
     achievements: string[];
+    orderIndex: number;
   }>;
   targetPositions: Array<{
     id: string;
@@ -63,6 +69,7 @@ export default function ProfilePage() {
     totalYearsExp: 0,
     currentRole: '',
     currentCompany: '',
+    photoUrl: '',
   });
 
   // Text fields
@@ -72,6 +79,44 @@ export default function ProfilePage() {
   // Strengths/weaknesses inline add
   const [strengthInput, setStrengthInput] = useState('');
   const [weaknessInput, setWeaknessInput] = useState('');
+
+  // Photo upload
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setIsUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/profile/photo', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) { showError(data.error || '사진 업로드에 실패했습니다.'); return; }
+      setBasicForm((prev) => ({ ...prev, photoUrl: data.photoUrl }));
+      await fetchProfile();
+    } catch {
+      showError('사진 업로드에 실패했습니다.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    setIsUploadingPhoto(true);
+    try {
+      const res = await fetch('/api/profile/photo', { method: 'DELETE' });
+      if (!res.ok) { showError('사진 삭제에 실패했습니다.'); return; }
+      setBasicForm((prev) => ({ ...prev, photoUrl: '' }));
+      await fetchProfile();
+    } catch {
+      showError('사진 삭제에 실패했습니다.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   // PDF resume upload
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +128,7 @@ export default function ProfilePage() {
   } | null>(null);
   const [showParseModal, setShowParseModal] = useState(false);
   const [showResumeEditModal, setShowResumeEditModal] = useState(false);
+  const [showResumeGenerateModal, setShowResumeGenerateModal] = useState(false);
 
   // Saving states
   const [savingSection, setSavingSection] = useState<string | null>(null);
@@ -105,6 +151,7 @@ export default function ProfilePage() {
           totalYearsExp: data.profile.totalYearsExp,
           currentRole: data.profile.currentRole,
           currentCompany: data.profile.currentCompany || '',
+          photoUrl: data.profile.photoUrl || '',
         });
         setIntroText(data.profile.selfIntroduction || '');
         setResumeText(data.profile.resumeText || '');
@@ -146,6 +193,7 @@ export default function ProfilePage() {
         totalYearsExp: basicForm.totalYearsExp,
         currentRole: basicForm.currentRole.trim(),
         currentCompany: basicForm.currentCompany.trim() || undefined,
+        photoUrl: basicForm.photoUrl.trim() || null,
       });
       await fetchProfile();
       setIsEditingBasic(false);
@@ -426,6 +474,51 @@ export default function ProfilePage() {
                     className={inputClass}
                   />
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">
+                    이력서 사진
+                  </label>
+                  <div className="flex items-center gap-3">
+                    {basicForm.photoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={basicForm.photoUrl}
+                        alt="프로필 사진"
+                        className="w-20 h-24 object-cover rounded"
+                      />
+                    )}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => photoFileInputRef.current?.click()}
+                        disabled={isUploadingPhoto}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isUploadingPhoto ? '업로드 중...' : basicForm.photoUrl ? '사진 변경' : '사진 업로드'}
+                      </button>
+                      {basicForm.photoUrl && (
+                        <button
+                          type="button"
+                          onClick={handlePhotoDelete}
+                          disabled={isUploadingPhoto}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          사진 삭제
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <input
+                    ref={photoFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handlePhotoUpload}
+                  />
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
+                    이력서 생성 시 헤더에 포함됩니다. (선택사항, 최대 5MB)
+                  </p>
+                </div>
               </div>
               <div className="flex gap-2 pt-1">
                 <button
@@ -449,6 +542,7 @@ export default function ProfilePage() {
                         totalYearsExp: profile.totalYearsExp,
                         currentRole: profile.currentRole,
                         currentCompany: profile.currentCompany || '',
+                        photoUrl: profile.photoUrl || '',
                       });
                     }
                   }}
@@ -773,6 +867,51 @@ export default function ProfilePage() {
             onClose={() => setShowResumeEditModal(false)}
           />
         )}
+
+        {/* Resume Document Generation */}
+        <ProfileSection title="이력서 생성">
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 flex-1">
+                프로필 또는 AI 코칭 개선본을 바탕으로 PDF/DOCX 이력서를 생성합니다.
+              </p>
+              <button
+                onClick={() => setShowResumeGenerateModal(true)}
+                disabled={!(profile.experiences.length > 0 || profile.selfIntroduction || profile.resumeText)}
+                className={cn(
+                  'shrink-0 px-4 py-2 rounded-lg text-sm font-medium',
+                  'bg-blue-600 text-white hover:bg-blue-700',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+              >
+                이력서 생성
+              </button>
+            </div>
+            <ResumeHistory />
+          </div>
+        </ProfileSection>
+
+        {showResumeGenerateModal && (
+          <ResumeGenerateModal
+            isOpen={showResumeGenerateModal}
+            onClose={() => setShowResumeGenerateModal(false)}
+          />
+        )}
+
+        {/* Portfolio Projects */}
+        <ProfileSection title="포트폴리오 프로젝트">
+          <PortfolioProjectList />
+        </ProfileSection>
+
+        {/* AI Portfolio Guide */}
+        <ProfileSection title="AI 포트폴리오 가이드">
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              AI가 포트폴리오를 분석하고 포지셔닝 전략, 프로젝트별 개선안을 제시합니다.
+            </p>
+            <PortfolioGuideHistory />
+          </div>
+        </ProfileSection>
 
         {/* Resume Parse Modal */}
         {parsedResume && (

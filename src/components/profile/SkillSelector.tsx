@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { DEFAULT_PROFICIENCY } from '@/lib/constants/tech-stacks';
+import { getJobFunction } from '@/lib/job-functions';
 import { SkillPicker } from './SkillPicker';
 import { SkillCardList } from './SkillCardList';
 
@@ -16,12 +17,14 @@ interface Skill {
 interface SkillSelectorProps {
   skills: Skill[];
   onRefetch: () => Promise<void>;
+  jobFunction?: string;
 }
 
-const CATEGORY_ORDER = ['language', 'framework', 'database', 'infra', 'tool', 'other'];
+export function SkillSelector({ skills, onRefetch, jobFunction }: SkillSelectorProps) {
+  const config = getJobFunction(jobFunction || 'developer');
+  const categoryOrder = [...config.skillCategories.map(c => c.key), 'other'];
 
-export function SkillSelector({ skills, onRefetch }: SkillSelectorProps) {
-  const [activeTab, setActiveTab] = useState<string>('language');
+  const [activeTab, setActiveTab] = useState<string>(config.skillCategories[0]?.key || 'language');
   const [customSkillInput, setCustomSkillInput] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [addingSkill, setAddingSkill] = useState<string | null>(null);
@@ -183,12 +186,13 @@ export function SkillSelector({ skills, onRefetch }: SkillSelectorProps) {
           onCustomInputChange={setCustomSkillInput}
           onAddPreset={addPresetSkill}
           onAddCustom={addCustomSkill}
+          categories={config.skillCategories}
         />
 
         {/* Right: Added Skills */}
         <SkillCardList
           groupedSkills={groupedSkills}
-          categoryOrder={CATEGORY_ORDER}
+          categoryOrder={categoryOrder}
           expandedIds={expandedIds}
           onToggleExpand={toggleExpand}
           savingId={savingId}

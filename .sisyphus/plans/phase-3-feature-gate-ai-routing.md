@@ -64,8 +64,8 @@ import { SubscriptionTier } from '@prisma/client';
 
 export const TIER_LIMITS = {
   FREE: {
-    monthlySessions: 3,          // 월 3회
-    questionsPerSession: 10,     // 세션당 10개
+    monthlySessions: 1,          // 월 1회
+    questionsPerSession: 7,      // 세션당 7개
     evaluationMode: 'after_complete' as const,  // 사후 평가만
     followUpDepth: 1,            // 팔로업 1단계
     historyRetentionDays: 30,    // 30일 보관
@@ -74,8 +74,8 @@ export const TIER_LIMITS = {
     prioritySupport: false,
   },
   PRO: {
-    monthlySessions: null,       // 무제한 (null = unlimited)
-    questionsPerSession: 30,     // 세션당 30개
+    monthlySessions: 50,         // 월 50회
+    questionsPerSession: 15,     // 세션당 15개
     evaluationMode: 'both' as const,  // 실시간 + 사후
     followUpDepth: 3,            // 팔로업 3단계
     historyRetentionDays: null,  // 무제한 보관
@@ -170,7 +170,7 @@ export async function checkSessionLimit(userId: string, tier: SubscriptionTier):
 }> {
   const limit = TIER_LIMITS[tier].monthlySessions;
 
-  // PRO: 무제한
+  // PRO: 월 50회
   if (limit === null) {
     return { allowed: true, remaining: null };
   }
@@ -195,7 +195,7 @@ export async function checkSessionLimit(userId: string, tier: SubscriptionTier):
     return {
       allowed: false,
       remaining: 0,
-      message: `이번 달 무료 면접 횟수(${limit}회)를 모두 사용했습니다. PRO로 업그레이드하면 무제한으로 이용할 수 있습니다.`,
+      message: `이번 달 무료 면접 횟수(${limit}회)를 모두 사용했습니다. PRO로 업그레이드하면 월 50회까지 이용할 수 있습니다.`,
     };
   }
 
@@ -219,6 +219,15 @@ export async function POST(req: NextRequest) {
   if (!auth.authenticated) return auth.response;
 
   const { userId, tier } = auth;
+
+  // 이메일 인증 확인 (필수)
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.emailVerified) {
+    return NextResponse.json(
+      { error: '이메일 인증이 필요합니다. 이메일을 확인해주세요.' },
+      { status: 403 }
+    );
+  }
 
   // 세션 쿼타 확인
   const quota = await checkSessionLimit(userId, tier);
@@ -489,11 +498,14 @@ export async function POST(req: NextRequest) {
 ### 필수 (Must Have)
 
 ```
-[ ] FREE 사용자 4번째 세션 생성 시 -> 403 + "PRO로 업그레이드" 메시지
-    테스트: POST /api/interview (4번째) -> { error: "이번 달 무료 면접 횟수(3회)를...", upgradeUrl: "/pricing" }
+[ ] 이메일 미인증 사용자 세션 생성 차단
+    테스트: POST /api/interview (emailVerified: false) -> { error: "이메일 인증이 필요합니다..." }
 
-[ ] PRO 사용자 무제한 세션 생성 -> 성공
-    테스트: POST /api/interview (100번째) -> 201 Created
+[ ] FREE 사용자 2번째 세션 생성 시 -> 403 + "PRO로 업그레이드" 메시지
+    테스트: POST /api/interview (2번째) -> { error: "이번 달 무료 면접 횟수(1회)를...", upgradeUrl: "/pricing" }
+
+[ ] PRO 사용자 월 50회 세션 생성 -> 성공
+    테스트: POST /api/interview (50번째) -> 201 Created
 
 [ ] FREE 사용자 실시간 평가 요청 -> 차단 (사후 평가만 허용)
     테스트: POST /api/interview/evaluate (evaluationMode: 'immediate', tier: FREE) -> 403

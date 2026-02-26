@@ -3,6 +3,7 @@ import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { prisma } from '@/lib/db/prisma';
 import { stripe } from '@/lib/payment/stripe-client';
 import { z } from 'zod';
+import { checkUserRateLimit } from '@/lib/auth/user-rate-limit';
 
 const changePlanSchema = z.object({
   billingCycle: z.enum(['MONTHLY', 'YEARLY']),
@@ -11,6 +12,14 @@ const changePlanSchema = z.object({
 export async function POST(request: NextRequest) {
   const auth = requireAuthV2(request);
   if (!auth.authenticated) return auth.response;
+
+  const rateLimit = checkUserRateLimit(auth.user.userId, 'payment', 5);
+  if (rateLimit) {
+    return NextResponse.json(
+      { error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfter) } }
+    );
+  }
 
   try {
     const body = await request.json();

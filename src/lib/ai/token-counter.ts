@@ -30,5 +30,17 @@ export function countTokens(text: string): number {
 
 export function countMessagesTokens(messages: AIMessage[]): number {
   // OpenAI 메시지 포맷 기준: 메시지당 ~4 토큰 오버헤드 + content
-  return messages.reduce((sum, msg) => sum + countTokens(msg.content) + 4, 3);
+  return messages.reduce((sum, msg) => {
+    let contentTokens: number;
+    if (typeof msg.content === 'string') {
+      contentTokens = countTokens(msg.content);
+    } else {
+      contentTokens = msg.content.reduce((blockSum, block) => {
+        if (block.type === 'text') return blockSum + countTokens(block.text);
+        if (block.type === 'image_url') return blockSum + 1000; // 이미지당 ~1000 토큰 추정
+        return blockSum;
+      }, 0);
+    }
+    return sum + contentTokens + 4;
+  }, 3);
 }

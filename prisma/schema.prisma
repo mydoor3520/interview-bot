@@ -110,14 +110,18 @@ model UserProfile {
   // 자기소개 & 이력
   selfIntroduction String? // 자기소개서 텍스트
   resumeText       String? // 이력서 텍스트 (자유 형식)
+  photoUrl         String? // 이력서용 프로필 사진 URL
   strengths        String[] // 본인이 생각하는 강점
   weaknesses       String[] // 본인이 생각하는 약점
 
   // 관계
-  skills          UserSkill[] // 기술 스택 (숙련도 포함)
-  experiences     WorkExperience[] // 경력 사항
-  targetPositions TargetPosition[] // 지원 회사/포지션
-  resumeEdits     ResumeEdit[] // 이력서 첨삭 결과
+  skills             UserSkill[] // 기술 스택 (숙련도 포함)
+  experiences        WorkExperience[] // 경력 사항
+  targetPositions    TargetPosition[] // 지원 회사/포지션
+  resumeEdits        ResumeEdit[] // 이력서 첨삭 결과
+  resumeDocuments    ResumeDocument[] // 생성된 이력서 문서
+  portfolioProjects  PortfolioProject[] // 포트폴리오 프로젝트
+  portfolioGuides    PortfolioGuide[] // 포트폴리오 가이드
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -185,6 +189,8 @@ model TargetPosition {
   sessions           InterviewSession[] // 이 포지션으로 진행한 면접들
   generatedQuestions GeneratedQuestion[] // AI 생성 예상 질문
   resumeEdits        ResumeEdit[] // 이력서 첨삭 결과
+  resumeDocuments    ResumeDocument[] // 생성된 이력서 문서
+  portfolioGuides    PortfolioGuide[] // 포트폴리오 가이드
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -518,6 +524,82 @@ model ResumeEdit {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   interviewSessions InterviewSession[]
+  resumeDocuments   ResumeDocument[]
+
+  @@index([profileId])
+  @@index([profileId, targetPositionId])
+  @@index([targetPositionId])
+}
+
+// ─── 생성된 이력서 문서 ───
+model ResumeDocument {
+  id               String          @id @default(cuid())
+  profileId        String
+  profile          UserProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetPositionId String?
+  targetPosition   TargetPosition? @relation(fields: [targetPositionId], references: [id], onDelete: SetNull)
+  resumeEditId     String?
+  resumeEdit       ResumeEdit?     @relation(fields: [resumeEditId], references: [id], onDelete: SetNull)
+
+  // 생성 옵션
+  template         String          // "clean-modern" | "professional" | "executive"
+  sourceType       String          // "profile" (원본) | "coaching" (AI 개선본)
+  language         String          @default("ko") // "ko" | "en"
+
+  // JD 맞춤화 메타데이터
+  appliedKeywords  String[]        @default([])
+  reorderedCareers Json?
+
+  // 이력서 컨텐츠 (스냅샷)
+  content          Json
+
+  // 문서 상태
+  status           String          @default("generated") // "generating" | "generated" | "failed"
+
+  createdAt        DateTime        @default(now())
+
+  @@index([profileId])
+  @@index([targetPositionId])
+  @@index([profileId, createdAt])
+}
+
+// ─── 포트폴리오 프로젝트 ───
+model PortfolioProject {
+  id              String      @id @default(cuid())
+  profileId       String
+  profile         UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title           String
+  description     String
+  role            String
+  teamSize        Int?
+  startDate       String      // YYYY-MM
+  endDate         String?
+  techStack       String[]
+  achievements    String[]
+  troubleshooting String?
+  githubUrl       String?
+  demoUrl         String?
+  category        String      @default("personal") // personal | work | opensource | hackathon
+  orderIndex      Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([profileId])
+}
+
+// ─── 포트폴리오 가이드 ───
+model PortfolioGuide {
+  id                String          @id @default(cuid())
+  profileId         String
+  profile           UserProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetPositionId  String?
+  targetPosition    TargetPosition? @relation(fields: [targetPositionId], references: [id], onDelete: SetNull)
+  strategy          Json
+  overallScore      Int?
+  overallFeedback   String?
+  version           Int             @default(1)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   @@index([profileId])
   @@index([profileId, targetPositionId])

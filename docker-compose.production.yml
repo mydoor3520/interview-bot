@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://interview:${POSTGRES_PASSWORD}@db:5432/interview_bot
+      NEXT_PUBLIC_APP_URL: https://${DOMAIN:-interviewbot.kr}
+      JWT_SECRET: ${JWT_SECRET}
+      APP_PASSWORD: ${APP_PASSWORD}
+      CRON_SECRET: ${CRON_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_PRO_MONTHLY: ${STRIPE_PRICE_PRO_MONTHLY}
+      STRIPE_PRICE_PRO_YEARLY: ${STRIPE_PRICE_PRO_YEARLY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      ADMIN_ALLOWED_IPS: ${ADMIN_ALLOWED_IPS}
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS}
+    volumes:
+      - ./uploads:/app/public/uploads
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"

@@ -23,6 +23,7 @@ export interface TokenPayloadV2 {
   userId: string;
   email: string;
   tier: string;
+  isAdmin: boolean;
   authenticated: boolean;
   iat: number;
   exp: number;
@@ -41,9 +42,9 @@ export function signToken(): string {
   );
 }
 
-export function signTokenV2(userId: string, email: string, tier: string): string {
+export function signTokenV2(userId: string, email: string, tier: string, isAdmin: boolean = false): string {
   return jwt.sign(
-    { version: 2, userId, email, tier, authenticated: true },
+    { version: 2, userId, email, tier, isAdmin, authenticated: true },
     getJwtSecret(),
     { expiresIn: JWT_EXPIRY_SECONDS }
   );

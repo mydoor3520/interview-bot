@@ -12,6 +12,7 @@ interface Experience {
   description: string | null;
   techStack: string[];
   achievements: string[];
+  orderIndex: number;
 }
 
 interface ExperienceEditorProps {
@@ -189,6 +190,35 @@ export function ExperienceEditor({ experiences, onRefetch }: ExperienceEditorPro
       setDeletingId(null);
     } catch (err) {
       showError(err instanceof Error ? err.message : '경력 삭제에 실패했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReorder = async (index: number, direction: 'up' | 'down') => {
+    const newExperiences = [...experiences];
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= newExperiences.length) return;
+
+    // Swap items
+    [newExperiences[index], newExperiences[swapIndex]] = [newExperiences[swapIndex], newExperiences[index]];
+
+    // Re-normalize orderIndex by array position
+    const reorder = newExperiences.map((exp, i) => ({ id: exp.id, orderIndex: i }));
+
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/profile/experiences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reorder }),
+      });
+      if (!response.ok) {
+        throw new Error('순서 변경에 실패했습니다.');
+      }
+      await onRefetch();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '순서 변경에 실패했습니다.');
     } finally {
       setIsSaving(false);
     }
@@ -406,7 +436,24 @@ export function ExperienceEditor({ experiences, onRefetch }: ExperienceEditorPro
                     </button>
                   </div>
                 ) : (
-                  <div className="flex gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      onClick={() => handleReorder(experiences.indexOf(exp), 'up')}
+                      disabled={isSaving || experiences.length <= 1 || experiences.indexOf(exp) === 0}
+                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label="위로 이동"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => handleReorder(experiences.indexOf(exp), 'down')}
+                      disabled={isSaving || experiences.length <= 1 || experiences.indexOf(exp) === experiences.length - 1}
+                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                      aria-label="아래로 이동"
+                    >
+                      ↓
+                    </button>
+                    <span className="text-zinc-300 dark:text-zinc-600">|</span>
                     <button
                       onClick={() => handleEditClick(exp)}
                       className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"

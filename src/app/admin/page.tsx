@@ -1,182 +1,160 @@
-import { prismaBase as prisma } from '@/lib/db/prisma';
-import { AdminDashboardClient } from './dashboard-client';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from 'react';
+import { StatCard } from '@/components/admin/StatCard';
 
-export default async function AdminPage() {
-  const now = new Date();
-  const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+interface KPIValue {
+  value: number;
+  trend: 'up' | 'down' | 'neutral';
+  previousValue: number;
+}
 
-  const [summary, endpointBreakdown, modelBreakdown, dailyRaw, recentLogs] = await Promise.all([
-    prisma.aIUsageLog.aggregate({
-      where: { createdAt: { gte: startDate } },
-      _sum: { promptTokens: true, completionTokens: true, totalTokens: true },
-      _count: true,
-    }),
-    prisma.aIUsageLog.groupBy({
-      by: ['endpoint'],
-      where: { createdAt: { gte: startDate } },
-      _sum: { totalTokens: true },
-      _count: true,
-    }),
-    prisma.aIUsageLog.groupBy({
-      by: ['model'],
-      where: { createdAt: { gte: startDate } },
-      _sum: { totalTokens: true },
-      _count: true,
-    }),
-    prisma.$queryRaw<Array<{
-      date: string;
-      totalPrompt: bigint;
-      totalCompletion: bigint;
-      count: bigint;
-    }>>`
-      SELECT DATE("createdAt") as date,
-             SUM("promptTokens") as "totalPrompt",
-             SUM("completionTokens") as "totalCompletion",
-             COUNT(*) as count
-      FROM "AIUsageLog"
-      WHERE "createdAt" >= ${startDate}
-      GROUP BY DATE("createdAt")
-      ORDER BY date ASC
-    `,
-    prisma.aIUsageLog.findMany({
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-    }),
-  ]);
+interface DashboardData {
+  operations: {
+    activeUsersToday: KPIValue;
+    interviewsToday: KPIValue;
+    aiCostToday: KPIValue;
+    errorRateToday: KPIValue;
+  };
+  business: {
+    mrr: KPIValue;
+    newSignupsThisWeek: KPIValue;
+    conversionRate: KPIValue;
+    churnRate: KPIValue;
+    dauMauRatio: KPIValue;
+  };
+}
 
-  const daily = dailyRaw.map((d: { date: string; totalPrompt: bigint; totalCompletion: bigint; count: bigint }) => ({
-    date: String(d.date),
-    totalPrompt: Number(d.totalPrompt),
-    totalCompletion: Number(d.totalCompletion),
-    total: Number(d.totalPrompt) + Number(d.totalCompletion),
-    count: Number(d.count),
-  }));
+export default function AdminDashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const summaryData = {
-    totalTokens: summary._sum.totalTokens || 0,
-    totalPromptTokens: summary._sum.promptTokens || 0,
-    totalCompletionTokens: summary._sum.completionTokens || 0,
-    totalRequests: summary._count,
+  useEffect(() => {
+    async function fetchDashboard() {
+      try {
+        const res = await fetch('/api/admin/dashboard');
+        if (!res.ok) throw new Error('Failed to fetch');
+        const json = await res.json();
+        setData(json);
+      } catch (err) {
+        setError('데이터를 불러올 수 없습니다.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDashboard();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-white">대시보드</h1>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 animate-pulse">
+              <div className="h-4 bg-zinc-800 rounded w-20 mb-2" />
+              <div className="h-8 bg-zinc-800 rounded w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-red-400">{error || '알 수 없는 오류가 발생했습니다.'}</p>
+      </div>
+    );
+  }
+
+  // Format helpers
+  const formatCurrency = (v: string | number) => `₩${Number(v).toLocaleString()}`;
+  const formatPercent = (v: string | number) => `${v}%`;
+  const trendLabel = (current: number, previous: number) => {
+    if (previous === 0) return '';
+    const diff = current - previous;
+    return diff > 0 ? `+${diff}` : `${diff}`;
   };
 
-  const endpointData = endpointBreakdown.map(e => ({
-    endpoint: e.endpoint,
-    totalTokens: e._sum.totalTokens || 0,
-    count: e._count,
-  }));
-
-  const modelData = modelBreakdown.map(m => ({
-    model: m.model,
-    totalTokens: m._sum.totalTokens || 0,
-    count: m._count,
-  }));
-
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-        Token Usage Dashboard
-      </h1>
+    <div className="space-y-8">
+      <h1 className="text-2xl font-bold text-white">대시보드</h1>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Tokens (7d)</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">
-            {summaryData.totalTokens.toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Prompt Tokens</p>
-          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {summaryData.totalPromptTokens.toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Completion Tokens</p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {summaryData.totalCompletionTokens.toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Requests</p>
-          <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-            {summaryData.totalRequests.toLocaleString()}
-          </p>
+      {/* Operations KPIs */}
+      <div>
+        <h2 className="text-lg font-semibold text-zinc-300 mb-4">운영 지표</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="오늘 활성 사용자"
+            value={data.operations.activeUsersToday.value}
+            trend={data.operations.activeUsersToday.trend}
+            trendLabel={trendLabel(data.operations.activeUsersToday.value, data.operations.activeUsersToday.previousValue)}
+            subtitle="어제 대비"
+          />
+          <StatCard
+            title="오늘 면접 세션"
+            value={data.operations.interviewsToday.value}
+            trend={data.operations.interviewsToday.trend}
+            trendLabel={trendLabel(data.operations.interviewsToday.value, data.operations.interviewsToday.previousValue)}
+            subtitle="어제 대비"
+          />
+          <StatCard
+            title="오늘 AI 비용"
+            value={data.operations.aiCostToday.value}
+            formatValue={formatCurrency}
+            trend={data.operations.aiCostToday.trend}
+            subtitle="어제 대비"
+          />
+          <StatCard
+            title="오늘 오류율"
+            value={data.operations.errorRateToday.value}
+            formatValue={formatPercent}
+            trend={data.operations.errorRateToday.trend}
+            subtitle="낮을수록 좋음"
+          />
         </div>
       </div>
 
-      {/* Chart */}
-      <AdminDashboardClient
-        daily={daily}
-        endpointData={endpointData}
-        modelData={modelData}
-      />
-
-      {/* Recent Logs */}
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Recent Logs
-        </h2>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Time</th>
-                <th className="text-left px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Endpoint</th>
-                <th className="text-left px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Model</th>
-                <th className="text-right px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Prompt</th>
-                <th className="text-right px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Completion</th>
-                <th className="text-right px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Total</th>
-                <th className="text-center px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Est.</th>
-                <th className="text-right px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Duration</th>
-                <th className="text-center px-4 py-3 text-gray-500 dark:text-gray-400 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentLogs.map((log) => (
-                <tr key={log.id} className="border-b border-gray-100 dark:border-gray-700/50">
-                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                    {new Date(log.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                      {log.endpoint}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 text-xs">{log.model}</td>
-                  <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{log.promptTokens.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right text-gray-700 dark:text-gray-300">{log.completionTokens.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right font-medium text-gray-900 dark:text-white">{log.totalTokens.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-center">
-                    {log.estimated ? (
-                      <span className="text-yellow-600 dark:text-yellow-400 text-xs">~est</span>
-                    ) : (
-                      <span className="text-green-600 dark:text-green-400 text-xs">exact</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right text-gray-500 dark:text-gray-400">
-                    {log.durationMs ? `${(log.durationMs / 1000).toFixed(1)}s` : '-'}
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    {log.success ? (
-                      <span className="inline-flex w-2 h-2 rounded-full bg-green-500" />
-                    ) : (
-                      <span className="inline-flex w-2 h-2 rounded-full bg-red-500" title={log.errorMessage || undefined} />
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {recentLogs.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                    No usage logs yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {/* Business KPIs */}
+      <div>
+        <h2 className="text-lg font-semibold text-zinc-300 mb-4">비즈니스 지표</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard
+            title="MRR"
+            value={data.business.mrr.value}
+            formatValue={formatCurrency}
+            trend={data.business.mrr.trend}
+            subtitle="월간 반복 수익"
+          />
+          <StatCard
+            title="이번 주 가입"
+            value={data.business.newSignupsThisWeek.value}
+            trend={data.business.newSignupsThisWeek.trend}
+            trendLabel={trendLabel(data.business.newSignupsThisWeek.value, data.business.newSignupsThisWeek.previousValue)}
+            subtitle="지난주 대비"
+          />
+          <StatCard
+            title="전환율"
+            value={data.business.conversionRate.value}
+            formatValue={formatPercent}
+            subtitle="FREE → PRO"
+          />
+          <StatCard
+            title="이탈률"
+            value={data.business.churnRate.value}
+            formatValue={formatPercent}
+            subtitle="구독 해지"
+          />
+          <StatCard
+            title="DAU/MAU"
+            value={data.business.dauMauRatio.value}
+            formatValue={formatPercent}
+            subtitle="사용자 활성도"
+          />
         </div>
       </div>
     </div>

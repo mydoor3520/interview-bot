@@ -4,6 +4,7 @@ import "./globals.css";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { ToastProvider } from "@/components/Toast";
+import { PWARegister } from "@/components/PWARegister";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,6 +23,15 @@ export const metadata: Metadata = {
   },
   description: 'AI 면접관과 함께 실전 같은 모의 면접을 연습하세요. 맞춤형 피드백, 다양한 기술 주제, 성과 분석으로 완벽한 면접을 준비합니다.',
   keywords: ['AI 면접', '모의 면접', '면접 준비', '개발자 면접', '기술 면접', '코딩 면접'],
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'InterviewBot',
+  },
+  icons: {
+    apple: '/icons/apple-touch-icon.png',
+  },
   openGraph: {
     title: 'InterviewBot - AI 모의 면접 플랫폼',
     description: '실전 같은 AI 면접으로 자신감을 키우세요',
@@ -48,6 +58,7 @@ export default function RootLayout({
         <ToastProvider>
           <MainLayout>{children}</MainLayout>
           <FeedbackWidget />
+          <PWARegister />
         </ToastProvider>
       </body>
     </html>

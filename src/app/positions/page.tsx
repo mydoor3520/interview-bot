@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils/cn';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { JobParsingModal } from '@/components/JobParsingModal';
 import { ResumeEditModal } from '@/components/resume/ResumeEditModal';
+import { ResumeGenerateModal } from '@/components/resume/ResumeGenerateModal';
+import { PortfolioGuideHistory } from '@/components/portfolio/PortfolioGuideHistory';
 
 interface GeneratedQuestion {
   id: string;
@@ -102,6 +104,8 @@ export default function PositionsPage() {
   // AI Parsing modal
   const [showParsingModal, setShowParsingModal] = useState(false);
   const [resumeEditPositionId, setResumeEditPositionId] = useState<string | null>(null);
+  const [resumeGeneratePositionId, setResumeGeneratePositionId] = useState<string | null>(null);
+  const [portfolioGuidePositionId, setPortfolioGuidePositionId] = useState<string | null>(null);
 
   const tier = featureData?.tier || 'FREE';
   const maxPositions = featureData?.limits?.maxTargetPositions ?? 1;
@@ -1062,6 +1066,18 @@ export default function PositionsPage() {
                         이력서 코칭
                       </button>
                       <button
+                        onClick={() => setResumeGeneratePositionId(pos.id)}
+                        className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 transition-colors"
+                      >
+                        맞춤 이력서
+                      </button>
+                      <button
+                        onClick={() => setPortfolioGuidePositionId(portfolioGuidePositionId === pos.id ? null : pos.id)}
+                        className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700 transition-colors"
+                      >
+                        포트폴리오
+                      </button>
+                      <button
                         onClick={() => pos._count.generatedQuestions > 0 ? loadQuestions(pos.id) : generateQuestions(pos.id)}
                         disabled={generatingQuestions === pos.id || loadingQuestions === pos.id}
                         className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 disabled:opacity-50 transition-colors"
@@ -1121,6 +1137,13 @@ export default function PositionsPage() {
                       )}
                     </div>
                   </div>
+
+                  {portfolioGuidePositionId === pos.id && (
+                    <div className="rounded-b-lg border border-t-0 border-zinc-800 bg-zinc-950 p-5">
+                      <h4 className="text-sm font-semibold text-zinc-200 mb-3">포트폴리오 가이드</h4>
+                      <PortfolioGuideHistory targetPositionId={pos.id} />
+                    </div>
+                  )}
 
                   {expandedPositionId === pos.id && questions.length > 0 && (
                     <div className="rounded-b-lg border border-t-0 border-zinc-800 bg-zinc-950 p-5 space-y-4">
@@ -1258,6 +1281,12 @@ export default function PositionsPage() {
                               코칭
                             </button>
                             <button
+                              onClick={() => setResumeGeneratePositionId(pos.id)}
+                              className="rounded px-2 py-1 text-xs font-medium bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+                            >
+                              이력서
+                            </button>
+                            <button
                               onClick={() => handleEdit(pos)}
                               className="rounded px-2 py-1 text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
                               title="수정"
@@ -1306,6 +1335,14 @@ export default function PositionsPage() {
           isOpen={!!resumeEditPositionId}
           onClose={() => setResumeEditPositionId(null)}
           targetPositionId={resumeEditPositionId}
+        />
+      )}
+
+      {resumeGeneratePositionId && (
+        <ResumeGenerateModal
+          isOpen={!!resumeGeneratePositionId}
+          onClose={() => setResumeGeneratePositionId(null)}
+          targetPositionId={resumeGeneratePositionId}
         />
       )}
 

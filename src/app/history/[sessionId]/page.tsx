@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/Toast';
+import { stripMarkdown } from '@/lib/utils/strip-markdown';
 
 interface Evaluation {
   score: number;
@@ -34,6 +35,7 @@ interface Session {
   id: string;
   topics: string[];
   difficulty: string;
+  interviewType: string | null;
   status: string;
   totalScore: number | null;
   summary: string | null;
@@ -41,12 +43,20 @@ interface Session {
   completedAt: string | null;
   questions: Question[];
   targetPosition?: { company: string; position: string } | null;
+  companyStyle?: string | null;
+  techKnowledgeEnabled?: boolean;
 }
 
 const DIFFICULTIES = {
   junior: '주니어',
   mid: '미드',
   senior: '시니어',
+};
+
+const INTERVIEW_TYPE_BADGE: Record<string, { label: string; className: string }> = {
+  technical: { label: '기술', className: 'bg-blue-500/20 text-blue-400' },
+  behavioral: { label: '인성', className: 'bg-purple-500/20 text-purple-400' },
+  mixed: { label: '통합', className: 'bg-green-500/20 text-green-400' },
 };
 
 export default function SessionDetailPage() {
@@ -128,6 +138,11 @@ export default function SessionDetailPage() {
                 )}
 
                 <div className="flex flex-wrap gap-2 mb-4">
+                  {session.interviewType && INTERVIEW_TYPE_BADGE[session.interviewType] && (
+                    <span className={cn('px-3 py-1 rounded text-sm font-medium', INTERVIEW_TYPE_BADGE[session.interviewType].className)}>
+                      {INTERVIEW_TYPE_BADGE[session.interviewType].label}
+                    </span>
+                  )}
                   <span className="px-3 py-1 bg-zinc-800 rounded text-sm font-medium text-zinc-300">
                     {DIFFICULTIES[session.difficulty as keyof typeof DIFFICULTIES]}
                   </span>
@@ -179,7 +194,7 @@ export default function SessionDetailPage() {
                       {question.difficulty}
                     </span>
                   </div>
-                  <h3 className="text-lg font-medium text-white mb-4">{question.content}</h3>
+                  <h3 className="text-lg font-medium text-white mb-4">{stripMarkdown(question.content)}</h3>
                 </div>
 
                 {question.evaluation && (
@@ -213,7 +228,7 @@ export default function SessionDetailPage() {
                   <div>
                     <h4 className="text-sm font-medium text-zinc-400 mb-2">피드백</h4>
                     <div className="bg-zinc-800 rounded-lg p-4">
-                      <p className="text-white whitespace-pre-wrap">{question.evaluation.feedback}</p>
+                      <p className="text-white whitespace-pre-wrap">{stripMarkdown(question.evaluation.feedback)}</p>
                     </div>
                   </div>
 
@@ -252,7 +267,7 @@ export default function SessionDetailPage() {
                   <div>
                     <h4 className="text-sm font-medium text-zinc-400 mb-2">모범 답안</h4>
                     <div className="bg-zinc-800 rounded-lg p-4">
-                      <p className="text-zinc-300 whitespace-pre-wrap">{question.evaluation.modelAnswer}</p>
+                      <p className="text-zinc-300 whitespace-pre-wrap">{stripMarkdown(question.evaluation.modelAnswer)}</p>
                     </div>
                   </div>
                 </div>
@@ -265,7 +280,7 @@ export default function SessionDetailPage() {
                   <div className="space-y-3">
                     {question.followUps.map((followUp, i) => (
                       <div key={i} className="bg-zinc-800 rounded-lg p-4">
-                        <p className="text-white mb-2">{followUp.content}</p>
+                        <p className="text-white mb-2">{stripMarkdown(followUp.content)}</p>
                         {followUp.userAnswer && (
                           <div className="mt-2 pl-4 border-l-2 border-zinc-700">
                             <p className="text-sm text-zinc-400 mb-1">답변:</p>
@@ -275,7 +290,7 @@ export default function SessionDetailPage() {
                         {followUp.aiFeedback && (
                           <div className="mt-2 pl-4 border-l-2 border-zinc-700">
                             <p className="text-sm text-zinc-400 mb-1">피드백:</p>
-                            <p className="text-sm text-zinc-300">{followUp.aiFeedback}</p>
+                            <p className="text-sm text-zinc-300">{stripMarkdown(followUp.aiFeedback)}</p>
                           </div>
                         )}
                       </div>

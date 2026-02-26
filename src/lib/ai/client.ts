@@ -35,7 +35,7 @@ function getOtherProvider(current: AIProvider, primary: AIProvider, fallback: AI
 
 export function createAIClient(context?: {
   sessionId?: string;
-  endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit';
+  endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit' | 'portfolio_guide';
 }): AIClient {
   const { primary, fallback } = getProviders();
 
@@ -139,7 +139,7 @@ function trackLogPromise(promise: Promise<void>): void {
 
 function wrapWithLogging(
   client: AIClient,
-  context: { sessionId?: string; endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit' }
+  context: { sessionId?: string; endpoint: 'stream' | 'evaluate' | 'evaluate_batch' | 'job_parse' | 'generate_questions' | 'resume_parse' | 'resume_edit' | 'portfolio_guide' }
 ): AIClient {
   return {
     async *streamChat(options: AIStreamOptions): AsyncIterable<string> {

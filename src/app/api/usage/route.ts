@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthV2 } from '@/lib/auth/require-auth';
 import { prisma } from '@/lib/db/prisma';
-import { TIER_LIMITS, checkSessionLimit, checkResumeEditLimit } from '@/lib/feature-gate';
+import { TIER_LIMITS, checkSessionLimit, checkResumeEditLimit, checkPortfolioGuideLimit } from '@/lib/feature-gate';
 import type { TierKey } from '@/lib/feature-gate';
 
 export async function GET(request: NextRequest) {
@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       : 0;
 
     const resumeEditQuota = await checkResumeEditLimit(auth.user.userId, tier);
+    const portfolioGuideQuota = await checkPortfolioGuideLimit(auth.user.userId, tier);
 
     const sessionsThisMonth = limits.monthlySessions !== null && quota.remaining !== null
       ? limits.monthlySessions - quota.remaining
@@ -61,6 +62,8 @@ export async function GET(request: NextRequest) {
         adaptiveDifficulty: limits.adaptiveDifficulty,
         crossTechQuestions: limits.crossTechQuestions,
         monthlyResumeEdits: limits.monthlyResumeEdits,
+        monthlyPortfolioGuides: limits.monthlyPortfolioGuides,
+        maxPortfolioProjects: limits.maxPortfolioProjects,
       },
       usage: {
         sessionsThisMonth,
@@ -69,6 +72,7 @@ export async function GET(request: NextRequest) {
         monthlyCostUsd: monthlyCost._sum.cost ?? 0,
         currentPositionCount: positionCount,
         remainingResumeEdits: resumeEditQuota.remaining,
+        remainingPortfolioGuides: portfolioGuideQuota.remaining,
       },
     });
   } catch (error) {

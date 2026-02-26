@@ -12,6 +12,7 @@ interface SkillPickerProps {
   onCustomInputChange: (value: string) => void;
   onAddPreset: (name: string, category: string) => void;
   onAddCustom: () => void;
+  categories?: Array<{ key: string; label: string; items: string[] }>;
 }
 
 export function SkillPicker({
@@ -23,7 +24,11 @@ export function SkillPicker({
   onCustomInputChange,
   onAddPreset,
   onAddCustom,
+  categories,
 }: SkillPickerProps) {
+  // Use categories prop, falling back to TECH_CATEGORIES for backward compat
+  const displayCategories = categories || TECH_CATEGORIES;
+
   return (
     <div className="space-y-4">
       {/* Section heading */}
@@ -34,7 +39,7 @@ export function SkillPicker({
       {/* Horizontal category tabs */}
       <div className="overflow-x-auto">
         <div className="flex gap-2 flex-nowrap">
-          {TECH_CATEGORIES.map((category) => (
+          {displayCategories.map((category) => (
             <button
               key={category.key}
               onClick={() => onTabChange(category.key)}
@@ -53,7 +58,7 @@ export function SkillPicker({
 
       {/* Preset tag grid */}
       <div className="flex flex-wrap gap-2">
-        {TECH_CATEGORIES.find(cat => cat.key === activeTab)?.items.map((item) => {
+        {displayCategories.find(cat => cat.key === activeTab)?.items.map((item) => {
           const isAdded = existingSkillNames.has(item.toLowerCase());
           const isAdding = addingSkill === item;
           return (
